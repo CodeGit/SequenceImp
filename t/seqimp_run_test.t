@@ -1,5 +1,9 @@
 #!/usr/bin/perl
 
+###########################################################################################################
+# Integration test of seqimp covers all steps from organise to features
+###########################################################################################################
+
 use warnings;
 use strict;
 use Test::More;
@@ -118,7 +122,22 @@ sub runReaper{
 	
 	$analysisDir = File::Spec->catfile($analysisDir, "analysis");
 	my $pid = open3(\*IN, \*OUT, \*ERR, 
-	"$SEQIMP --step=reaper --description=$descriptionFile --user-configuration=$configFile --dataDir=$dataDir --analysisDir=$analysisDir --annotationDir=$ANNOTATION");
+	"$SEQIMP --step=reaper --description=$descriptionFile --user-configuration=$configFile --dataDir=$dataDir --analysisDir=$analysisDir");
+	close(IN);
+	my @outlines = <OUT>;
+	my @errlines = <ERR>;
+	waitpid($pid, 0);
+	
+	is ($?, 0, "Reaper exit code");
+	print "ERROR\n@errlines\n" if ($?);
+}
+
+sub runFilter{
+	my ($dataDir, $analysisDir, $configFile, $descriptionFile) = @_;
+	
+	$analysisDir = File::Spec->catfile($analysisDir, "analysis");
+	my $pid = open3(\*IN, \*OUT, \*ERR, 
+	"$SEQIMP --step=filter --description=$descriptionFile --user-configuration=$configFile --dataDir=$dataDir --analysisDir=$analysisDir --annotationDir=$ANNOTATION");
 	close(IN);
 	my @outlines = <OUT>;
 	my @errlines = <ERR>;
@@ -128,14 +147,34 @@ sub runReaper{
 	print "ERROR\n@errlines\n" if ($?);
 }
 
-sub runSeqImp {
+sub runAlign{
 	my ($dataDir, $analysisDir, $configFile, $descriptionFile) = @_;
 	
-	runOrganise($dataDir, $analysisDir, $configFile, $descriptionFile);
-    runReaper($dataDir, $analysisDir, $configFile, $descriptionFile);
-    #runFilter($dataDir, $analysisDir, $configFile, $descriptionFile);
-    #runAlign($dataDir, $analysisDir, $configFile, $descriptionFile);
-    #runFeatures($dataDir, $analysisDir, $configFile, $descriptionFile);
+	$analysisDir = File::Spec->catfile($analysisDir, "analysis");
+	my $pid = open3(\*IN, \*OUT, \*ERR, 
+	"$SEQIMP --step=align --description=$descriptionFile --user-configuration=$configFile --dataDir=$dataDir --analysisDir=$analysisDir --annotationDir=$ANNOTATION");
+	close(IN);
+	my @outlines = <OUT>;
+	my @errlines = <ERR>;
+	waitpid($pid, 0);
+	
+	is ($?, 0, "Align exit code");
+	print "ERROR\n@errlines\n" if ($?);
+}
+
+sub runFeatures{
+	my ($dataDir, $analysisDir, $configFile, $descriptionFile) = @_;
+	
+	$analysisDir = File::Spec->catfile($analysisDir, "analysis");
+	my $pid = open3(\*IN, \*OUT, \*ERR, 
+	"$SEQIMP --step=features --description=$descriptionFile --user-configuration=$configFile --dataDir=$dataDir --analysisDir=$analysisDir --annotationDir=$ANNOTATION");
+	close(IN);
+	my @outlines = <OUT>;
+	my @errlines = <ERR>;
+	waitpid($pid, 0);
+	
+	is ($?, 0, "Features exit code");
+	print "ERROR\n@errlines\n" if ($?);
 }
 
 sub test_initialise {
@@ -157,8 +196,8 @@ sub test_five_prime_barcode_run {
 	my $seqfileLocation = File::Spec->catfile($seqLocation, $seqfile);
 	my $newLocation = File::Spec->catfile($TEST_SEQUENCE_STAGING, $seqfile);
 	copy($seqfileLocation, $newLocation);
-	#ok(-e $seqfileLocation, "Test sequence file");
-	#ok(-e $newLocation, "Test sequence file copy to '$newLocation'");
+	ok(-e $seqfileLocation, "Test sequence file");
+	ok(-e $newLocation, "Test sequence file copy to '$newLocation'");
 	
 	my $description = [];
 	my $file = {};
@@ -188,43 +227,392 @@ sub test_five_prime_barcode_run {
 	$config->{'overlap'} = 15;
 	my $configFile = writeConfig($config, $TEST_SEQUENCE_STAGING);
 	
-    runSeqImp($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    #runSeqImp($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
     
     #organise tests
-    ok(-e $TEST_ANALYSIS, "Organise analysis directory created");
+    runOrganise($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    ok(-e $TEST_ANALYSIS, "Organise directory created");
     my $testfileAnalysis = File::Spec->catfile($TEST_ANALYSIS, "testfile");
-    ok(-e $testfileAnalysis, "Organise testfile subdirectory created");
+    ok(-e $testfileAnalysis, "Organise seqfile subdirectory created");
     my $testfileMetadata = File::Spec->catfile($testfileAnalysis, "metadata");
-    ok(-e $testfileMetadata, "Organise testfile metadata subdirectory created");
+    ok(-e $testfileMetadata, "Organise seqfile metadata subdirectory created");
     my $testMetadataFile = File::Spec->catfile($testfileMetadata, "metadata.txt");
-    ok(-e $testfileMetadata, "Organise testfile metadata file created");
+    ok(-e $testfileMetadata, "Organise seqfile metadata file created");
     my $testfileData = File::Spec->catfile($testfileAnalysis, "data");
-    ok(-e $testfileData, "Organise testfile data subdirectory created");
+    ok(-e $testfileData, "Organise seqfile data subdirectory created");
     my $testfileDataFile = File::Spec->catfile($testfileData, "analysis_$seqfile");
-    ok(-e $testfileDataFile, "Organise testfile data file created");
+    ok(-e $testfileDataFile, "Organise seqfile data file created");
+    
     #reaper tests
+    runReaper($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
     my $testfileReaper = File::Spec->catfile($testfileAnalysis, "REAPER");
     ok(-e $testfileReaper, "Reaper analysis directory created");
     #barcode files
 	for my $barcode (split(",", $file->{'Barcodes'})) {
     	for my $suffix (qw(clean.gz report.input.q report.input.nt report.clean.nt report.clean.len uniquify.log report.clean.trinucl report.clean.annotlen clean.uniquified.fa.gz)) {
     		my $testReaperBarcodeOutputFile = File::Spec->catfile($testfileReaper, "testfile.$barcode.$suffix");
-    		ok(-e $testReaperBarcodeOutputFile, "Reaper analysis file testfile.$barcode.$suffix created");
+    		ok(-e $testReaperBarcodeOutputFile, "Reaper file testfile.$barcode.$suffix created");
     	}
     }
     #summary files
     for my $suffix (qw(total.report.miss.nt total.report.miss.len total.report.input.q total.report.input.nt sumstat lint.gz)) {
     	my $testReaperTotalOutputFile = File::Spec->catfile($testfileReaper, "testfile.$suffix");
-    	ok(-e $testReaperTotalOutputFile, "Reaper analysis file testfile.$suffix created");
+    	ok(-e $testReaperTotalOutputFile, "Reaper file testfile.$suffix created");
     }
     my $testfileQC = File::Spec->catfile($testfileAnalysis, "QC");
     ok(-e $testfileQC, "Reaper analysis QC directory created");
-    my $testfileQCFile = File::Spec->catfile($testfileQC, "testfile_Reaper_qc.pdf");
-    ok(-e $testfileQCFile, "Reaper analysis QC pdf file created");
+    my $testfileReaperQCFile = File::Spec->catfile($testfileQC, "testfile_Reaper_qc.pdf");
+    ok(-e $testfileReaperQCFile, "Reaper QC pdf file created");
+    
+    #filter tests
+    runFilter($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    my $testfileFilter = File::Spec->catfile($testfileAnalysis, "PROCESSED");
+    ok(-e $testfileFilter, "Filter directory created");
+    my $testfileFilterTrimmed = File::Spec->catfile($testfileFilter, "total.saved.trimmit.tab");
+    ok(-e $testfileFilter, "Filter trimmed file created");
+    my $testfileFilterQC = File::Spec->catfile($testfileQC, "testfile_Processed_reads_qc.pdf");
+    ok(-e $testfileFilterQC, "Filter QC file created");
+    #barcode files
+	for my $barcode (split(",", $file->{'Barcodes'})) {
+		for my $suffix (qw(report.clean.processed.annotlen clean.processed.fa.gz)) {
+    		my $testFilterBarcodeOutputFile = File::Spec->catfile($testfileFilter, "testfile.$barcode.$suffix");
+    		ok(-e $testFilterBarcodeOutputFile, "Filter file testfile.$barcode.$suffix created");
+    	}
+	}
+	
+	#align tests
+	runAlign($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    my $testfileAlign = File::Spec->catfile($testfileAnalysis, "BOWTIE");
+    ok(-e $testfileAlign, "Align directory created");
+    my $testfileAlignLog = File::Spec->catfile($testfileAlign, "bowtie_log.txt");
+    ok(-e $testfileAlignLog, "Align log file created");
+    my $testfileAlignTotal = File::Spec->catfile($testfileAlign, "bowtie.total.mapping.tab");
+    ok(-e $testfileAlignTotal, "Align total mapping file created");
+    my $testfileAlignQCFile = File::Spec->catfile($testfileQC, "testfile_Bowtie_qc.pdf");
+    ok(-e $testfileAlignQCFile, "Align QC pdf file created");
+    for my $barcode (split(",", $file->{'Barcodes'})) {
+		for my $suffix (qw(unique.output.sort.bam.bai temp.output.sam.gz unique.output.sort.bam unique.output.sam.gz unique.output.bam hitFreq.tab conv.GR.RData chromLoc.tab)) {
+    		my $testAlignBarcodeOutputFile = File::Spec->catfile($testfileAlign, "testfile.$barcode.bowtie.$suffix");
+    		ok(-e $testAlignBarcodeOutputFile, "Align analysis file testfile.$barcode.bowtie.$suffix created");
+    		#ok(-e $testAlignBarcodeOutputFile, "Align analysis file $testAlignBarcodeOutputFile created");
+    	}
+	}
+    
+    #features test
+    runFeatures($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    my $testfileFeatures = File::Spec->catfile($testfileAnalysis, "miRNA_ANALYSIS");
+    ok(-e $testfileFeatures, "Features directory created");
+    my $testfileFeatureCount = File::Spec->catfile($testfileFeatures, "testfile.mature.counts.txt");
+    ok(-e $testfileFeatureCount, "Align count file created");
+}
+
+sub test_pirna_five_prime_barcode_run {
+	cleanup();
+	prepare();
+	
+	my @seqfiles = qw(test_file1.txt.gz test_file2.txt.gz test_file3.txt.gz test_file4.txt.gz);
+	my $seqLocation = File::Spec->catfile($CWD, "resources", "pirna_5p_barcode");
+	for my $seqfile (@seqfiles) {
+		my $seqfileLocation = File::Spec->catfile($seqLocation, $seqfile);
+		my $newLocation = File::Spec->catfile($TEST_SEQUENCE_STAGING, $seqfile);
+		copy($seqfileLocation, $newLocation);
+		ok(-e $seqfileLocation, "Test sequence file");
+		ok(-e $newLocation, "Test sequence file copy to '$newLocation'");
+	}
+	
+	my $description = [];
+	#->{'analysis'} = "pirna_5p_barcode";
+	for  (my $i=0; $i <= $#seqfiles; $i++) {
+		my $file = {};
+		my $seqfile = $seqfiles[$i];
+		$file->{"Name"} = "Genome_Research_$i";
+		$file->{"File"} = $seqfile;
+		$file->{'Geometry'} = "5p_barcode";
+		$file->{'Barcodes'} = $i == 0 ? "CTAA" : "ACTA,CTAA";
+		$file->{'5p_ad'} = "GTTCAGAGTTCTACAGTCCGACGATC";
+		$file->{'3p_ad'} = "ATCTCGTATGCCGTCTTCTGCTTG";
+		$file->{'5p_seq_insert'} = "-";
+		$file->{'3p_seq_insert'} = "-";
+		push(@{$description}, $file);
+	}
+	my $descriptionFile = writeDescription($description, $TEST_SEQUENCE_STAGING);
+	
+	my $config = {};
+	$config->{'minSize'} = 18;
+	$config->{'maxSize'} = 26;
+	$config->{'genome'} = "mouse";
+	$config->{'ensversion'} = 66;
+	$config->{'mismatches'} = 2;
+	$config->{'maxHits'} = 20;
+	$config->{'sam'} = "FLAG";
+	$config->{'feature'} = "miRNA";
+	$config->{'mirversion'} = 18;
+	$config->{'annot_conflict'} = "merge";
+	$config->{'overlap'} = 15;
+	my $configFile = writeConfig($config, $TEST_SEQUENCE_STAGING);
+    
+    #my @analysisNames = map {$_->{"Name"}} @{$description};
+    #organise tests
+    runOrganise($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    ok(-e $TEST_ANALYSIS, "Organise directory created");
+    for (my $i = 0; $i <= $#{$description}; $i++) {
+    	my $name = @{$description}[$i]->{"Name"};
+    	my $seqfile = @{$description}[$i]->{"File"};
+    	my $testfileAnalysis = File::Spec->catfile($TEST_ANALYSIS, $name);
+	    ok(-e $testfileAnalysis, "Organise seqfile subdirectory created");
+	    my $testfileMetadata = File::Spec->catfile($testfileAnalysis, "metadata");
+	    ok(-e $testfileMetadata, "Organise seqfile metadata subdirectory created");
+	    my $testMetadataFile = File::Spec->catfile($testfileMetadata, "metadata.txt");
+	    ok(-e $testfileMetadata, "Organise seqfile metadata file created");
+	    my $testfileData = File::Spec->catfile($testfileAnalysis, "data");
+	    ok(-e $testfileData, "Organise seqfile data subdirectory created");
+	    my $testfileDataFile = File::Spec->catfile($testfileData, "analysis_$seqfile");
+	    ok(-e $testfileDataFile, "Organise seqfile data file created");	
+    }
+    
+    #reaper tests
+    runReaper($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    for (my $i = 0; $i <= $#{$description}; $i++) {
+    	my $name = @{$description}[$i]->{"Name"};
+    	my $barcodes = @{$description}[$i]->{"Barcodes"};
+    	my $seqfile = @{$description}[$i]->{"File"};
+    	my $testfileReaper = File::Spec->catfile($TEST_ANALYSIS, $name, "REAPER");
+	    ok(-e $testfileReaper, "Reaper analysis directory created");
+	    #barcode files
+		for my $barcode (split(",", $barcodes)) {
+	    	for my $suffix (qw(clean.gz report.input.q report.input.nt report.clean.nt report.clean.len uniquify.log report.clean.trinucl report.clean.annotlen clean.uniquified.fa.gz)) {
+	    		my $testReaperBarcodeOutputFile = File::Spec->catfile($testfileReaper, "$name.$barcode.$suffix");
+	    		ok(-e $testReaperBarcodeOutputFile, "Reaper file $name.$barcode.$suffix created");
+	    	}
+	    }
+	    #summary files
+	    for my $suffix (qw(total.report.miss.nt total.report.miss.len total.report.input.q total.report.input.nt sumstat lint.gz)) {
+	    	my $testReaperTotalOutputFile = File::Spec->catfile($testfileReaper, "$name.$suffix");
+	    	ok(-e $testReaperTotalOutputFile, "Reaper file $name.$suffix created");
+	    }
+	    my $testfileQC = File::Spec->catfile($TEST_ANALYSIS, $name, "QC");
+	    ok(-e $testfileQC, "Reaper analysis QC directory created");
+	    my $testfileReaperQCFile = File::Spec->catfile($testfileQC, $name."_Reaper_qc.pdf");
+	    ok(-e $testfileReaperQCFile, "Reaper QC pdf file created");
+    }   
+    
+    #filter tests
+    runFilter($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    for (my $i = 0; $i <= $#{$description}; $i++) {
+    	my $name = @{$description}[$i]->{"Name"};
+    	my $barcodes = @{$description}[$i]->{"Barcodes"};
+    	my $seqfile = @{$description}[$i]->{"File"};
+    	
+    	my $testfileFilter = File::Spec->catfile($TEST_ANALYSIS, $name, "PROCESSED");
+    	ok(-e $testfileFilter, "Filter directory created");
+    
+    	my $testfileFilterTrimmed = File::Spec->catfile($testfileFilter, "total.saved.trimmit.tab");
+	    ok(-e $testfileFilter, "Filter trimmed file created");
+	    my $testfileQC = File::Spec->catfile($TEST_ANALYSIS, $name, "QC");
+	    ok(-e $testfileQC, "Reaper analysis QC directory created");
+	    my $testfileFilterQC = File::Spec->catfile($testfileQC, $name."_Processed_reads_qc.pdf");
+	    ok(-e $testfileFilterQC, "Filter QC file created");
+	    
+	    #barcode files
+		for my $barcode (split(",", $barcodes)) {
+			for my $suffix (qw(report.clean.processed.annotlen clean.processed.fa.gz)) {
+	    		my $testFilterBarcodeOutputFile = File::Spec->catfile($testfileFilter, "$name.$barcode.$suffix");
+	    		ok(-e $testFilterBarcodeOutputFile, "Filter file $name.$barcode.$suffix created");
+	    	}
+		}
+    }    
+	
+	#align tests
+	runAlign($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    for (my $i = 0; $i <= $#{$description}; $i++) {
+    	my $name = @{$description}[$i]->{"Name"};
+    	my $barcodes = @{$description}[$i]->{"Barcodes"};
+    	my $seqfile = @{$description}[$i]->{"File"};
+    	
+    	my $testfileAlign = File::Spec->catfile($TEST_ANALYSIS, $name, "BOWTIE");
+	    ok(-e $testfileAlign, "Align directory created");
+	    my $testfileAlignLog = File::Spec->catfile($testfileAlign, "bowtie_log.txt");
+	    ok(-e $testfileAlignLog, "Align log file created");
+	    my $testfileAlignTotal = File::Spec->catfile($testfileAlign, "bowtie.total.mapping.tab");
+	    ok(-e $testfileAlignTotal, "Align total mapping file created");
+	    my $testfileQC = File::Spec->catfile($TEST_ANALYSIS, $name, "QC");
+	    ok(-e $testfileQC, "Reaper analysis QC directory created");
+	    my $testfileAlignQCFile = File::Spec->catfile($testfileQC, $name."_Bowtie_qc.pdf");
+	    ok(-e $testfileAlignQCFile, "Align QC pdf file created");
+	    for my $barcode (split(",", $barcodes)) {
+			for my $suffix (qw(unique.output.sort.bam.bai temp.output.sam.gz unique.output.sort.bam unique.output.sam.gz unique.output.bam hitFreq.tab conv.GR.RData chromLoc.tab)) {
+	    		my $testAlignBarcodeOutputFile = File::Spec->catfile($testfileAlign, "$name.$barcode.bowtie.$suffix");
+	    		ok(-e $testAlignBarcodeOutputFile, "Align analysis file $name.$barcode.bowtie.$suffix created");
+	    	}
+		}
+    }
+        
+    #features test
+    runFeatures($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    for (my $i = 0; $i <= $#{$description}; $i++) {
+    	my $name = @{$description}[$i]->{"Name"};
+    	my $barcodes = @{$description}[$i]->{"Barcodes"};
+    	my $seqfile = @{$description}[$i]->{"File"};
+    	
+    	my $testfileFeatures = File::Spec->catfile($TEST_ANALYSIS, $name, "miRNA_ANALYSIS");
+    	ok(-e $testfileFeatures, "Features directory created");
+    	my $testfileFeatureCount = File::Spec->catfile($testfileFeatures, "$name.mature.counts.txt");
+    	ok(-e $testfileFeatureCount, "Align count file created");
+    }
+    
+}
+
+sub test_small_rna_run {
+	cleanup();
+	prepare();
+	
+	my @seqfiles = qw(test_file1.txt.gz test_file3.txt.gz);
+	my $seqLocation = File::Spec->catfile($CWD, "resources", "small_rna_no_barcode");
+	for my $seqfile (@seqfiles) {
+		my $seqfileLocation = File::Spec->catfile($seqLocation, $seqfile);
+		my $newLocation = File::Spec->catfile($TEST_SEQUENCE_STAGING, $seqfile);
+		copy($seqfileLocation, $newLocation);
+		ok(-e $seqfileLocation, "Test sequence file");
+		ok(-e $newLocation, "Test sequence file copy to '$newLocation'");
+	}
+	
+	my $description = [];
+	#->{'analysis'} = "small_rna_no_barcode";
+	for  (my $i=0; $i <= $#seqfiles; $i++) {
+		my $file = {};
+		my $seqfile = $seqfiles[$i];
+		$file->{"Name"} = "Genome_Research_$i";
+		$file->{"File"} = $seqfile;
+		$file->{'Geometry'} = "no_barcode";
+		$file->{'Barcodes'} = "-";
+		$file->{'5p_ad'} = "-";
+		$file->{'3p_ad'} = "AAAAAAAAAAAAGATCGGAAGAGCGGTTCAGCAGGAATGCCGAGA";
+		$file->{'5p_seq_insert'} = "-";
+		$file->{'3p_seq_insert'} = "-";
+		push(@{$description}, $file);
+	}
+	my $descriptionFile = writeDescription($description, $TEST_SEQUENCE_STAGING);
+	
+	my $config = {};
+	$config->{'minSize'} = 22;
+	$config->{'maxSize'} = 32;
+	$config->{'genome'} = "human";
+	$config->{'ensversion'} = 66;
+	$config->{'mismatches'} = 2;
+	$config->{'maxHits'} = 20;
+	$config->{'sam'} = "FLAG";
+	$config->{'feature'} = "miRNA";
+	$config->{'mirversion'} = 18;
+	$config->{'annot_conflict'} = "merge";
+	$config->{'overlap'} = 15;
+	my $configFile = writeConfig($config, $TEST_SEQUENCE_STAGING);
+    
+    #my @analysisNames = map {$_->{"Name"}} @{$description};
+    #organise tests
+    runOrganise($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    ok(-e $TEST_ANALYSIS, "Organise directory created");
+    for (my $i = 0; $i <= $#{$description}; $i++) {
+    	my $name = @{$description}[$i]->{"Name"};
+    	my $seqfile = @{$description}[$i]->{"File"};
+    	my $testfileAnalysis = File::Spec->catfile($TEST_ANALYSIS, $name);
+	    ok(-e $testfileAnalysis, "Organise seqfile subdirectory created");
+	    my $testfileMetadata = File::Spec->catfile($testfileAnalysis, "metadata");
+	    ok(-e $testfileMetadata, "Organise seqfile metadata subdirectory created");
+	    my $testMetadataFile = File::Spec->catfile($testfileMetadata, "metadata.txt");
+	    ok(-e $testfileMetadata, "Organise seqfile metadata file created");
+	    my $testfileData = File::Spec->catfile($testfileAnalysis, "data");
+	    ok(-e $testfileData, "Organise seqfile data subdirectory created");
+	    my $testfileDataFile = File::Spec->catfile($testfileData, "analysis_$seqfile");
+	    ok(-e $testfileDataFile, "Organise seqfile data file created");	
+    }
+    
+    #reaper tests
+    runReaper($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    for (my $i = 0; $i <= $#{$description}; $i++) {
+    	my $name = @{$description}[$i]->{"Name"};
+    	my $seqfile = @{$description}[$i]->{"File"};
+    	my $testfileReaper = File::Spec->catfile($TEST_ANALYSIS, $name, "REAPER");
+	    ok(-e $testfileReaper, "Reaper analysis directory created");
+	    #barcode files
+		for my $suffix (qw(clean.gz report.input.q report.input.nt report.clean.nt report.clean.len uniquify.log report.clean.trinucl report.clean.annotlen clean.uniquified.fa.gz)) {
+    		my $testReaperOutputFile = File::Spec->catfile($testfileReaper, "$name.lane.$suffix");
+    		ok(-e $testReaperOutputFile, "Reaper file $name.lane.$suffix created");
+    	}
+    
+	    #summary files
+	    for my $suffix (qw(sumstat lint.gz)) {
+	    	my $testReaperTotalOutputFile = File::Spec->catfile($testfileReaper, "$name.$suffix");
+	    	ok(-e $testReaperTotalOutputFile, "Reaper file $name.$suffix created");
+	    }
+	    my $testfileQC = File::Spec->catfile($TEST_ANALYSIS, $name, "QC");
+	    ok(-e $testfileQC, "Reaper analysis QC directory created");
+	    my $testfileReaperQCFile = File::Spec->catfile($testfileQC, $name."_Reaper_qc.pdf");
+	    ok(-e $testfileReaperQCFile, "Reaper QC pdf file created");
+    }   
+    
+    #filter tests
+    runFilter($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    for (my $i = 0; $i <= $#{$description}; $i++) {
+    	my $name = @{$description}[$i]->{"Name"};
+    	my $seqfile = @{$description}[$i]->{"File"};
+    	
+    	my $testfileFilter = File::Spec->catfile($TEST_ANALYSIS, $name, "PROCESSED");
+    	ok(-e $testfileFilter, "Filter directory created");
+    
+    	my $testfileFilterTrimmed = File::Spec->catfile($testfileFilter, "total.saved.trimmit.tab");
+	    ok(-e $testfileFilter, "Filter trimmed file created");
+	    my $testfileQC = File::Spec->catfile($TEST_ANALYSIS, $name, "QC");
+	    ok(-e $testfileQC, "Reaper analysis QC directory created");
+	    my $testfileFilterQC = File::Spec->catfile($testfileQC, $name."_Processed_reads_qc.pdf");
+	    ok(-e $testfileFilterQC, "Filter QC file created");
+	    
+	    #barcode files
+		for my $suffix (qw(report.clean.processed.annotlen clean.processed.fa.gz)) {
+    		my $testFilterBarcodeOutputFile = File::Spec->catfile($testfileFilter, "$name.lane.$suffix");
+    		ok(-e $testFilterBarcodeOutputFile, "Filter file $name.lane.$suffix created");
+    	}
+    }    
+	
+	#align tests
+	runAlign($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    for (my $i = 0; $i <= $#{$description}; $i++) {
+    	my $name = @{$description}[$i]->{"Name"};
+    	my $seqfile = @{$description}[$i]->{"File"};
+    	
+    	my $testfileAlign = File::Spec->catfile($TEST_ANALYSIS, $name, "BOWTIE");
+	    ok(-e $testfileAlign, "Align directory created");
+	    my $testfileAlignLog = File::Spec->catfile($testfileAlign, "bowtie_log.txt");
+	    ok(-e $testfileAlignLog, "Align log file created");
+	    my $testfileAlignTotal = File::Spec->catfile($testfileAlign, "bowtie.total.mapping.tab");
+	    ok(-e $testfileAlignTotal, "Align total mapping file created");
+	    my $testfileQC = File::Spec->catfile($TEST_ANALYSIS, $name, "QC");
+	    ok(-e $testfileQC, "Reaper analysis QC directory created");
+	    my $testfileAlignQCFile = File::Spec->catfile($testfileQC, $name."_Bowtie_qc.pdf");
+	    ok(-e $testfileAlignQCFile, "Align QC pdf file created");
+    	for my $suffix (qw(unique.output.sort.bam.bai temp.output.sam.gz unique.output.sort.bam unique.output.sam.gz unique.output.bam hitFreq.tab conv.GR.RData chromLoc.tab)) {
+    		my $testAlignBarcodeOutputFile = File::Spec->catfile($testfileAlign, "$name.lane.bowtie.$suffix");
+    		ok(-e $testAlignBarcodeOutputFile, "Align analysis file $name.lane.bowtie.$suffix created");
+    	}
+    }
+        
+    #features test
+    runFeatures($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    for (my $i = 0; $i <= $#{$description}; $i++) {
+    	my $name = @{$description}[$i]->{"Name"};
+    	my $barcodes = @{$description}[$i]->{"Barcodes"};
+    	my $seqfile = @{$description}[$i]->{"File"};
+    	
+    	my $testfileFeatures = File::Spec->catfile($TEST_ANALYSIS, $name, "miRNA_ANALYSIS");
+    	ok(-e $testfileFeatures, "Features directory created");
+    	my $testfileFeatureCount = File::Spec->catfile($testfileFeatures, "$name.mature.counts.txt");
+    	ok(-e $testfileFeatureCount, "Align count file created");
+    }
     
 }
 
 test_initialise();
 test_five_prime_barcode_run();
+test_pirna_five_prime_barcode_run();
+test_small_rna_run();
 
 done_testing();
