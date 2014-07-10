@@ -103,77 +103,17 @@ sub writeConfig {
 	return $outFile;
 }
 
-sub runOrganise {
-	my ($dataDir, $analysisDir, $configFile, $descriptionFile) = @_;
-	
-	my $pid = open3(\*IN, \*OUT, \*ERR, 
-	"$SEQIMP --step=organise --no-unique --description=$descriptionFile --user-configuration=$configFile --dataDir=$dataDir --outDir=$analysisDir");
-	close(IN);
-	my @outlines = <OUT>;
-	my @errlines = <ERR>;
-	waitpid($pid, 0);
-	
-	is ($?, 0, "Organise exit code");
-	print "ERROR\n@errlines\n" if ($?);	
-}
+sub runStep {
+	my ($step, $configFile, $descriptionFile, $args) = @_;
 
-sub runReaper{
-	my ($dataDir, $analysisDir, $configFile, $descriptionFile) = @_;
-	
-	$analysisDir = File::Spec->catfile($analysisDir, "analysis");
 	my $pid = open3(\*IN, \*OUT, \*ERR, 
-	"$SEQIMP --step=reaper --description=$descriptionFile --user-configuration=$configFile --dataDir=$dataDir --analysisDir=$analysisDir");
+	"$SEQIMP --step=$step --description=$descriptionFile --user-configuration=$configFile $args");
 	close(IN);
 	my @outlines = <OUT>;
 	my @errlines = <ERR>;
 	waitpid($pid, 0);
 	
-	is ($?, 0, "Reaper exit code");
-	print "ERROR\n@errlines\n" if ($?);
-}
-
-sub runFilter{
-	my ($dataDir, $analysisDir, $configFile, $descriptionFile) = @_;
-	
-	$analysisDir = File::Spec->catfile($analysisDir, "analysis");
-	my $pid = open3(\*IN, \*OUT, \*ERR, 
-	"$SEQIMP --step=filter --description=$descriptionFile --user-configuration=$configFile --dataDir=$dataDir --analysisDir=$analysisDir --annotationDir=$ANNOTATION");
-	close(IN);
-	my @outlines = <OUT>;
-	my @errlines = <ERR>;
-	waitpid($pid, 0);
-	
-	is ($?, 0, "Filter exit code");
-	print "ERROR\n@errlines\n" if ($?);
-}
-
-sub runAlign{
-	my ($dataDir, $analysisDir, $configFile, $descriptionFile) = @_;
-	
-	$analysisDir = File::Spec->catfile($analysisDir, "analysis");
-	my $pid = open3(\*IN, \*OUT, \*ERR, 
-	"$SEQIMP --step=align --description=$descriptionFile --user-configuration=$configFile --dataDir=$dataDir --analysisDir=$analysisDir --annotationDir=$ANNOTATION");
-	close(IN);
-	my @outlines = <OUT>;
-	my @errlines = <ERR>;
-	waitpid($pid, 0);
-	
-	is ($?, 0, "Align exit code");
-	print "ERROR\n@errlines\n" if ($?);
-}
-
-sub runFeatures{
-	my ($dataDir, $analysisDir, $configFile, $descriptionFile) = @_;
-	
-	$analysisDir = File::Spec->catfile($analysisDir, "analysis");
-	my $pid = open3(\*IN, \*OUT, \*ERR, 
-	"$SEQIMP --step=features --description=$descriptionFile --user-configuration=$configFile --dataDir=$dataDir --analysisDir=$analysisDir --annotationDir=$ANNOTATION");
-	close(IN);
-	my @outlines = <OUT>;
-	my @errlines = <ERR>;
-	waitpid($pid, 0);
-	
-	is ($?, 0, "Features exit code");
+	is ($?, 0, "$step exit code");
 	print "ERROR\n@errlines\n" if ($?);
 }
 
@@ -198,6 +138,7 @@ sub test_five_prime_barcode_run {
 	copy($seqfileLocation, $newLocation);
 	ok(-e $seqfileLocation, "Test sequence file");
 	ok(-e $newLocation, "Test sequence file copy to '$newLocation'");
+	my $analysisDir = File::Spec->catfile($TEST_RUN, "analysis");
 	
 	my $description = [];
 	my $file = {};
@@ -230,7 +171,7 @@ sub test_five_prime_barcode_run {
     #runSeqImp($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
     
     #organise tests
-    runOrganise($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    runStep("organise", $configFile, $descriptionFile, "--no-unique --dataDir=$TEST_SEQUENCE_STAGING --outDir=$TEST_RUN");
     ok(-e $TEST_ANALYSIS, "Organise directory created");
     my $testfileAnalysis = File::Spec->catfile($TEST_ANALYSIS, "testfile");
     ok(-e $testfileAnalysis, "Organise seqfile subdirectory created");
@@ -244,7 +185,7 @@ sub test_five_prime_barcode_run {
     ok(-e $testfileDataFile, "Organise seqfile data file created");
     
     #reaper tests
-    runReaper($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    runStep("reaper", $configFile, $descriptionFile, "--no-unique --dataDir=$TEST_SEQUENCE_STAGING --analysisDir=$analysisDir");
     my $testfileReaper = File::Spec->catfile($testfileAnalysis, "REAPER");
     ok(-e $testfileReaper, "Reaper analysis directory created");
     #barcode files
@@ -265,7 +206,7 @@ sub test_five_prime_barcode_run {
     ok(-e $testfileReaperQCFile, "Reaper QC pdf file created");
     
     #filter tests
-    runFilter($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    runStep("filter", $configFile, $descriptionFile, "--no-unique --dataDir=$TEST_SEQUENCE_STAGING --analysisDir=$analysisDir");
     my $testfileFilter = File::Spec->catfile($testfileAnalysis, "PROCESSED");
     ok(-e $testfileFilter, "Filter directory created");
     my $testfileFilterTrimmed = File::Spec->catfile($testfileFilter, "total.saved.trimmit.tab");
@@ -281,7 +222,7 @@ sub test_five_prime_barcode_run {
 	}
 	
 	#align tests
-	runAlign($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+	runStep("align", $configFile, $descriptionFile, "--no-unique --dataDir=$TEST_SEQUENCE_STAGING --analysisDir=$analysisDir --annotationDir=$ANNOTATION");
     my $testfileAlign = File::Spec->catfile($testfileAnalysis, "BOWTIE");
     ok(-e $testfileAlign, "Align directory created");
     my $testfileAlignLog = File::Spec->catfile($testfileAlign, "bowtie_log.txt");
@@ -299,7 +240,7 @@ sub test_five_prime_barcode_run {
 	}
     
     #features test
-    runFeatures($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    runStep("features", $configFile, $descriptionFile, "--no-unique --dataDir=$TEST_SEQUENCE_STAGING --analysisDir=$analysisDir --annotationDir=$ANNOTATION");
     my $testfileFeatures = File::Spec->catfile($testfileAnalysis, "miRNA_ANALYSIS");
     ok(-e $testfileFeatures, "Features directory created");
     my $testfileFeatureCount = File::Spec->catfile($testfileFeatures, "testfile.mature.counts.txt");
@@ -310,6 +251,7 @@ sub test_pirna_five_prime_barcode_run {
 	cleanup();
 	prepare();
 	
+	my $analysisDir = File::Spec->catfile($TEST_RUN, "analysis");
 	my @seqfiles = qw(test_file1.txt.gz test_file2.txt.gz test_file3.txt.gz test_file4.txt.gz);
 	my $seqLocation = File::Spec->catfile($CWD, "resources", "pirna_5p_barcode");
 	for my $seqfile (@seqfiles) {
@@ -353,7 +295,7 @@ sub test_pirna_five_prime_barcode_run {
     
     #my @analysisNames = map {$_->{"Name"}} @{$description};
     #organise tests
-    runOrganise($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    runStep("organise", $configFile, $descriptionFile, "--no-unique --dataDir=$TEST_SEQUENCE_STAGING --outDir=$TEST_RUN");
     ok(-e $TEST_ANALYSIS, "Organise directory created");
     for (my $i = 0; $i <= $#{$description}; $i++) {
     	my $name = @{$description}[$i]->{"Name"};
@@ -371,7 +313,7 @@ sub test_pirna_five_prime_barcode_run {
     }
     
     #reaper tests
-    runReaper($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    runStep("reaper", $configFile, $descriptionFile, "--no-unique --dataDir=$TEST_SEQUENCE_STAGING --analysisDir=$analysisDir");
     for (my $i = 0; $i <= $#{$description}; $i++) {
     	my $name = @{$description}[$i]->{"Name"};
     	my $barcodes = @{$description}[$i]->{"Barcodes"};
@@ -397,7 +339,7 @@ sub test_pirna_five_prime_barcode_run {
     }   
     
     #filter tests
-    runFilter($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    runStep("filter", $configFile, $descriptionFile, "--no-unique --dataDir=$TEST_SEQUENCE_STAGING --analysisDir=$analysisDir");
     for (my $i = 0; $i <= $#{$description}; $i++) {
     	my $name = @{$description}[$i]->{"Name"};
     	my $barcodes = @{$description}[$i]->{"Barcodes"};
@@ -423,7 +365,7 @@ sub test_pirna_five_prime_barcode_run {
     }    
 	
 	#align tests
-	runAlign($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+	runStep("align", $configFile, $descriptionFile, "--no-unique --dataDir=$TEST_SEQUENCE_STAGING --analysisDir=$analysisDir --annotationDir=$ANNOTATION");
     for (my $i = 0; $i <= $#{$description}; $i++) {
     	my $name = @{$description}[$i]->{"Name"};
     	my $barcodes = @{$description}[$i]->{"Barcodes"};
@@ -448,7 +390,7 @@ sub test_pirna_five_prime_barcode_run {
     }
         
     #features test
-    runFeatures($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    runStep("features", $configFile, $descriptionFile, "--no-unique --dataDir=$TEST_SEQUENCE_STAGING --analysisDir=$analysisDir --annotationDir=$ANNOTATION");
     for (my $i = 0; $i <= $#{$description}; $i++) {
     	my $name = @{$description}[$i]->{"Name"};
     	my $barcodes = @{$description}[$i]->{"Barcodes"};
@@ -466,6 +408,7 @@ sub test_small_rna_run {
 	cleanup();
 	prepare();
 	
+	my $analysisDir = File::Spec->catfile($TEST_RUN, "analysis");
 	my @seqfiles = qw(test_file1.txt.gz test_file3.txt.gz);
 	my $seqLocation = File::Spec->catfile($CWD, "resources", "small_rna_no_barcode");
 	for my $seqfile (@seqfiles) {
@@ -509,7 +452,7 @@ sub test_small_rna_run {
     
     #my @analysisNames = map {$_->{"Name"}} @{$description};
     #organise tests
-    runOrganise($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    runStep("organise", $configFile, $descriptionFile, "--no-unique --dataDir=$TEST_SEQUENCE_STAGING --outDir=$TEST_RUN");
     ok(-e $TEST_ANALYSIS, "Organise directory created");
     for (my $i = 0; $i <= $#{$description}; $i++) {
     	my $name = @{$description}[$i]->{"Name"};
@@ -527,7 +470,7 @@ sub test_small_rna_run {
     }
     
     #reaper tests
-    runReaper($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    runStep("reaper", $configFile, $descriptionFile, "--no-unique --dataDir=$TEST_SEQUENCE_STAGING --analysisDir=$analysisDir");
     for (my $i = 0; $i <= $#{$description}; $i++) {
     	my $name = @{$description}[$i]->{"Name"};
     	my $seqfile = @{$description}[$i]->{"File"};
@@ -551,7 +494,7 @@ sub test_small_rna_run {
     }   
     
     #filter tests
-    runFilter($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    runStep("filter", $configFile, $descriptionFile, "--no-unique --dataDir=$TEST_SEQUENCE_STAGING --analysisDir=$analysisDir");
     for (my $i = 0; $i <= $#{$description}; $i++) {
     	my $name = @{$description}[$i]->{"Name"};
     	my $seqfile = @{$description}[$i]->{"File"};
@@ -574,7 +517,7 @@ sub test_small_rna_run {
     }    
 	
 	#align tests
-	runAlign($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+	runStep("align", $configFile, $descriptionFile, "--no-unique --dataDir=$TEST_SEQUENCE_STAGING --analysisDir=$analysisDir --annotationDir=$ANNOTATION");
     for (my $i = 0; $i <= $#{$description}; $i++) {
     	my $name = @{$description}[$i]->{"Name"};
     	my $seqfile = @{$description}[$i]->{"File"};
@@ -596,7 +539,7 @@ sub test_small_rna_run {
     }
         
     #features test
-    runFeatures($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+    runStep("features", $configFile, $descriptionFile, "--no-unique --dataDir=$TEST_SEQUENCE_STAGING --analysisDir=$analysisDir --annotationDir=$ANNOTATION");
     for (my $i = 0; $i <= $#{$description}; $i++) {
     	my $name = @{$description}[$i]->{"Name"};
     	my $barcodes = @{$description}[$i]->{"Barcodes"};
@@ -607,12 +550,159 @@ sub test_small_rna_run {
     	my $testfileFeatureCount = File::Spec->catfile($testfileFeatures, "$name.mature.counts.txt");
     	ok(-e $testfileFeatureCount, "Align count file created");
     }
+}
+
+sub test_paired_end_run {
+	cleanup();
+	prepare();
+	
+	my $analysisDir = File::Spec->catfile($TEST_RUN, "analysis");
+	my @seqfiles = qw(test_file1.fastq.gz test_file2.fastq.gz);
+	my $seqLocation = File::Spec->catfile($CWD, "resources", "paired_end", "paired_no_bar");
+	for my $seqfile (@seqfiles) {
+		my $seqfileLocation = File::Spec->catfile($seqLocation, $seqfile);
+		my $newLocation = File::Spec->catfile($TEST_SEQUENCE_STAGING, $seqfile);
+		copy($seqfileLocation, $newLocation);
+		ok(-e $seqfileLocation, "Test sequence file");
+		ok(-e $newLocation, "Test sequence file copy to '$newLocation'");
+	}
+	
+	my $description = [];
+	#->{'analysis'} = "small_rna_no_barcode";
+	my $file = {};
+	$file->{"Name"} = "paired_end";
+	$file->{"File"} = join(",", @seqfiles);
+	$file->{'Geometry'} = "pair_no_barcode";
+	$file->{'Barcodes'} = "-";
+	$file->{'5p_ad'} = "TACACTCTTTCCCTACACGACGCTCTTCCGATCT";
+	$file->{'3p_ad'} = "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC";
+	$file->{'5p_seq_insert'} = "-";
+	$file->{'3p_seq_insert'} = "-";
+	push(@{$description}, $file);
+	my $descriptionFile = writeDescription($description, $TEST_SEQUENCE_STAGING);
+	
+	my $config = {};
+	$config->{'minSize'} = 30;
+#	$config->{'maxSize'} = 32;
+#	$config->{'five'} = 6;
+#	$config->{'genome'} = "human";
+#	$config->{'ensversion'} = 66;
+#	$config->{'mismatches'} = 2;
+#	$config->{'maxHits'} = 20;
+	$config->{'fastq'} = "FLAG";
+	$config->{'sam'} = "FLAG";
+#	$config->{'feature'} = "miRNA";
+#	$config->{'mirversion'} = 18;
+#	$config->{'annot_conflict'} = "merge";
+#	$config->{'overlap'} = 15;
+	my $configFile = writeConfig($config, $TEST_SEQUENCE_STAGING);
     
+    #my @analysisNames = map {$_->{"Name"}} @{$description};
+    #organise tests
+    runStep("organise", $configFile, $descriptionFile, "--no-unique --paired --dataDir=$TEST_SEQUENCE_STAGING --outDir=$TEST_RUN");
+    ok(-e $TEST_ANALYSIS, "Organise directory created");
+    for (my $i = 0; $i <= $#seqfiles; $i++) {
+    	my $name = @{$description}[0]->{"Name"}."_".($i+1);
+    	my $seqfile = $seqfiles[$i];
+    	my $testfileAnalysis = File::Spec->catfile($TEST_ANALYSIS, $name);
+	    ok(-e $testfileAnalysis, "Organise seqfile subdirectory created");
+	    my $testfileMetadata = File::Spec->catfile($testfileAnalysis, "metadata");
+	    ok(-e $testfileMetadata, "Organise seqfile metadata subdirectory created");
+	    my $testMetadataFile = File::Spec->catfile($testfileMetadata, "metadata.txt");
+	    ok(-e $testfileMetadata, "Organise seqfile metadata file created");
+	    my $testfileData = File::Spec->catfile($testfileAnalysis, "data");
+	    ok(-e $testfileData, "Organise seqfile data subdirectory created");
+	    my $testfileDataFile = File::Spec->catfile($testfileData, "analysis_$seqfile");
+	    ok(-e $testfileDataFile, "Organise seqfile data file created");	
+    }
+    
+    #reaper tests
+    runStep("reaper", $configFile, $descriptionFile, "--no-unique --paired --dataDir=$TEST_SEQUENCE_STAGING --analysisDir=$analysisDir");
+    for (my $i = 0; $i <= $#seqfiles; $i++) {
+    	my $name = @{$description}[0]->{"Name"}."_".($i+1);
+    	my $seqfile = $seqfiles[$i];
+    	my $testfileReaper = File::Spec->catfile($TEST_ANALYSIS, $name, "REAPER");
+	    ok(-e $testfileReaper, "Reaper analysis directory created [$testfileReaper]");
+	    #barcode files
+		for my $suffix (qw(clean.gz report.input.q report.input.nt report.clean.nt report.clean.len report.clean.trinucl)) {
+    		my $testReaperOutputFile = File::Spec->catfile($testfileReaper, "$name.lane.$suffix");
+    		ok(-e $testReaperOutputFile, "Reaper file $name.lane.$suffix created");
+    	}
+    
+	    #summary files
+	    for my $suffix (qw(sumstat lint.gz)) {
+	    	my $testReaperTotalOutputFile = File::Spec->catfile($testfileReaper, "$name.$suffix");
+	    	ok(-e $testReaperTotalOutputFile, "Reaper file $name.$suffix created");
+	    }
+	    my $testfileQC = File::Spec->catfile($TEST_ANALYSIS, $name, "QC");
+	    ok(-e $testfileQC, "Reaper analysis QC directory created");
+	    my $testfileReaperQCFile = File::Spec->catfile($testfileQC, $name."_Reaper_qc.pdf");
+	    ok(-e $testfileReaperQCFile, "Reaper QC pdf file created");
+    }   
+    
+    #filter tests
+    runStep("filter", $configFile, $descriptionFile, "--no-unique --paired --dataDir=$TEST_SEQUENCE_STAGING --analysisDir=$analysisDir");
+    for (my $i = 0; $i <= $#seqfiles; $i++) {
+    	my $name = @{$description}[0]->{"Name"}."_".($i+1);
+    	my $seqfile = $seqfiles[$i];
+     	
+    	my $testfileFilter = File::Spec->catfile($TEST_ANALYSIS, $name, "PROCESSED");
+    	ok(-e $testfileFilter, "Filter directory created");
+    
+    	my $testfileFilterTrimmed = File::Spec->catfile($testfileFilter, "total.saved.trimmit.tab");
+	    ok(-e $testfileFilter, "Filter trimmed file created");
+	    my $testfileQC = File::Spec->catfile($TEST_ANALYSIS, $name, "QC");
+	    ok(-e $testfileQC, "Reaper analysis QC directory created");
+	    my $testfileFilterQC = File::Spec->catfile($testfileQC, $name."_Processed_reads_qc.pdf");
+	    ok(-e $testfileFilterQC, "Filter QC file created");
+	    
+	    #barcode files
+		for my $suffix (qw(tallied.fastq.gz proc.sumstat)) {
+    		my $testFilterBarcodeOutputFile = File::Spec->catfile($testfileFilter, "$name.lane.$suffix");
+    		ok(-e $testFilterBarcodeOutputFile, "Filter file $name.lane.$suffix created");
+    	}
+    }    
+	
+#	#align tests
+#	runAlign($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+#    for (my $i = 0; $i <= $#{$description}; $i++) {
+#    	my $name = @{$description}[$i]->{"Name"};
+#    	my $seqfile = @{$description}[$i]->{"File"};
+#    	
+#    	my $testfileAlign = File::Spec->catfile($TEST_ANALYSIS, $name, "BOWTIE");
+#	    ok(-e $testfileAlign, "Align directory created");
+#	    my $testfileAlignLog = File::Spec->catfile($testfileAlign, "bowtie_log.txt");
+#	    ok(-e $testfileAlignLog, "Align log file created");
+#	    my $testfileAlignTotal = File::Spec->catfile($testfileAlign, "bowtie.total.mapping.tab");
+#	    ok(-e $testfileAlignTotal, "Align total mapping file created");
+#	    my $testfileQC = File::Spec->catfile($TEST_ANALYSIS, $name, "QC");
+#	    ok(-e $testfileQC, "Reaper analysis QC directory created");
+#	    my $testfileAlignQCFile = File::Spec->catfile($testfileQC, $name."_Bowtie_qc.pdf");
+#	    ok(-e $testfileAlignQCFile, "Align QC pdf file created");
+#    	for my $suffix (qw(unique.output.sort.bam.bai temp.output.sam.gz unique.output.sort.bam unique.output.sam.gz unique.output.bam hitFreq.tab conv.GR.RData chromLoc.tab)) {
+#    		my $testAlignBarcodeOutputFile = File::Spec->catfile($testfileAlign, "$name.lane.bowtie.$suffix");
+#    		ok(-e $testAlignBarcodeOutputFile, "Align analysis file $name.lane.bowtie.$suffix created");
+#    	}
+#    }
+#        
+#    #features test
+#    runFeatures($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
+#    for (my $i = 0; $i <= $#{$description}; $i++) {
+#    	my $name = @{$description}[$i]->{"Name"};
+#    	my $barcodes = @{$description}[$i]->{"Barcodes"};
+#    	my $seqfile = @{$description}[$i]->{"File"};
+#    	
+#    	my $testfileFeatures = File::Spec->catfile($TEST_ANALYSIS, $name, "miRNA_ANALYSIS");
+#    	ok(-e $testfileFeatures, "Features directory created");
+#    	my $testfileFeatureCount = File::Spec->catfile($testfileFeatures, "$name.mature.counts.txt");
+#    	ok(-e $testfileFeatureCount, "Align count file created");
+#    }
 }
 
 test_initialise();
 test_five_prime_barcode_run();
 test_pirna_five_prime_barcode_run();
 test_small_rna_run();
+test_paired_end_run();
 
 done_testing();
