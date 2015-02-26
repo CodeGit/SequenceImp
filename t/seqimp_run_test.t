@@ -33,7 +33,7 @@ my $TEST_SEQUENCE_STAGING = File::Spec->catfile($TEST_DIR, "seq-staging");
 my $TEST_METADATA = File::Spec->catfile($TEST_DIR, "metadata");
 my $TEST_RUN = File::Spec->catfile($TEST_DIR, "run");
 my $TEST_ANALYSIS = File::Spec->catfile($TEST_RUN, "analysis");
-my $ANNOTATION = File::Spec->catfile($SEQIMP_ROOT, "Annotation-12-164");
+my $ANNOTATION = File::Spec->catfile($SEQIMP_ROOT, "annotation_210814");
 
 my @DESCRIPTION_COLUMNS = qw(Name File Geometry Barcodes 5p_ad 3p_ad 5p_seq_insert 3p_seq_insert);
 
@@ -44,7 +44,7 @@ push(@CONFIG_ENTRIES, qw(@reaper reapConfig perlUnq));
 push(@CONFIG_ENTRIES, qw(@filter low minSize maxSize five three));
 push(@CONFIG_ENTRIES, qw(@align+features genome ensversion));
 push(@CONFIG_ENTRIES, qw(@align chunk mismatches maxHits sam));
-push(@CONFIG_ENTRIES, qw(@features feature mirversion annot_conflict overlap proportional separate_loci repMaxHits repMismatches repChunk));
+push(@CONFIG_ENTRIES, qw(@features feature mirversion annot_conflict overlap proportional separate_loci collapse_method repversion repMaxHits repMismatches repChunk));
 
 $ENV{'SEQIMP_ROOT'} = $SEQIMP_ROOT;
 my $path = Env::Path->PATH;
@@ -129,7 +129,7 @@ sub runStep {
 	my ($step, $configFile, $descriptionFile, $args) = @_;
 
 	my $pid = open3(\*IN, \*OUT, \*ERR, 
-	"$SEQIMP --step=$step --description=$descriptionFile --user-configuration=$configFile $args");
+	"$SEQIMP --debug --step=$step --description=$descriptionFile --user-configuration=$configFile $args");
 	close(IN);
 	my @outlines = <OUT>;
 	my @errlines = <ERR>;
@@ -143,6 +143,7 @@ sub test_Prerequisites {
 	ok (-e $OSPATH, "Found dependencies");
 	ok (-e $RPATH, "Found R bin directory");
 	ok (-e $PERLPATH, "Found perl bin directory");
+	ok (-e $ANNOTATION, "Found annotation directory");
 	
 	my @executables = qw(perl R swan tally samtools reaper minion bowtie);
 	foreach my $executable (@executables) {
@@ -193,14 +194,23 @@ sub test_five_prime_barcode_run {
 	$config->{'minSize'} = 18;
 	$config->{'maxSize'} = 26;
 	$config->{'genome'} = "mouse";
-	$config->{'ensversion'} = 66;
+	$config->{'ensversion'} = 1;
 	$config->{'mismatches'} = 2;
 	$config->{'maxHits'} = 20;
 	$config->{'sam'} = "FLAG";
 	$config->{'feature'} = "miRNA";
-	$config->{'mirversion'} = 18;
+	$config->{'mirversion'} = 1;
 	$config->{'annot_conflict'} = "merge";
 	$config->{'overlap'} = 15;
+	#newer options
+	$config->{'proportional'} = "NA";
+	$config->{'separate_loci'} = "NA";
+	$config->{'collapse_method'} = "mature_id";
+	$config->{'repversion'} = "NA";
+	$config->{'repMaxHits'} = "NA";
+	$config->{'repMismatches'} = "NA";
+	$config->{'repChunk'} = "NA";
+	
 	my $configFile = writeConfig($config, $TEST_SEQUENCE_STAGING);
 	
     #runSeqImp($TEST_SEQUENCE_STAGING, $TEST_RUN, $configFile, $descriptionFile);
@@ -318,12 +328,12 @@ sub test_pirna_five_prime_barcode_run {
 	$config->{'minSize'} = 18;
 	$config->{'maxSize'} = 26;
 	$config->{'genome'} = "mouse";
-	$config->{'ensversion'} = 66;
+	$config->{'ensversion'} = 1;
 	$config->{'mismatches'} = 2;
 	$config->{'maxHits'} = 20;
 	$config->{'sam'} = "FLAG";
 	$config->{'feature'} = "miRNA";
-	$config->{'mirversion'} = 18;
+	$config->{'mirversion'} = 1;
 	$config->{'annot_conflict'} = "merge";
 	$config->{'overlap'} = 15;
 	my $configFile = writeConfig($config, $TEST_SEQUENCE_STAGING);
@@ -734,11 +744,11 @@ sub test_paired_end_run {
 #    }
 }
 
-test_Prerequisites();
+#test_Prerequisites();
 #test_initialise();
-#test_five_prime_barcode_run();
+test_five_prime_barcode_run();
 #test_pirna_five_prime_barcode_run();
-#test_small_rna_run();
+#'test_small_rna_run();
 #test_paired_end_run();
 
-done_testing();
+#done_testing();
