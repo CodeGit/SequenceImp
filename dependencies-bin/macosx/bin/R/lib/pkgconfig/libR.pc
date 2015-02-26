@@ -1,0 +1,10 @@
+rhome=/Users/maq/source/r-osx-build/clean-build/lib/R
+rlibdir=${rhome}/lib
+rincludedir=/Users/maq/source/r-osx-build/clean-build/lib/R/include
+
+Name: libR
+Description: R as a library
+Version: 3.0.2
+Libs: -L${rlibdir} -lR
+Cflags: -I${rincludedir} -I${rincludedir}
+Libs.private: -L/usr/local/Cellar/gfortran/4.8.1/gfortran/lib/gcc/x86_64-apple-darwin12.3.0/4.8.1 -L/usr/local/Cellar/gfortran/4.8.1/gfortran/lib -lgfortran -lquadmath -lm   -lreadline  -licucore -lm -liconv
