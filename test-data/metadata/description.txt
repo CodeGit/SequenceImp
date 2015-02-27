@@ -1,0 +1,2 @@
+Name	File	Geometry	Barcodes	5p_ad	3p_ad	5p_seq_insert	3p_seq_insert
+paired_end	test_file1.fastq.gz,test_file2.fastq.gz	pair_no_barcode	-	TACACTCTTTCCCTACACGACGCTCTTCCGATCT	AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC	-	-
