@@ -44,7 +44,7 @@ my $rawdata = "";
 my $metadata = "";
 my $base = "reap";                                                                                             # Passed to reaper as a base name for the reaper output files
 my $baseDir = "";
-my $reaperRoute = "reaper";                                    # Default route for Reaper script
+my $reaperRoute = "reaper";                                    #Default route for Reaper script
 my $reaperExtra = "";
 my $uniquifyRoute = "$ENV{SEQIMP_ROOT}/bin/uniquify.pl";       # Default route for uniquify script
 my $qcRoute = "$ENV{SEQIMP_ROOT}/bin/QualityPlot.R";           # Default route for QualityPlot script
@@ -119,7 +119,7 @@ my $repversion = -1;
 my $no_merge = 0;
 my $proportional = 0;
 my $annot_conflict = "";
-my $collapse_method = "default";  # added 180714 to allow miRNAs to be collapsed on sequence as well as ID.
+my $collapse_method = "default";  # added 180714 to allow miRNAs to be collapsed on sequence as well as ID.
 
 my $sampleTag = "";
 
@@ -238,7 +238,7 @@ ___________________________________________________________________________
 
 ### STAGE ONE OPTIONS: reaper ###
 
-# Required:
+# Required:
 --geometry        <STRING>     The read geometry (currently "no_barcode", "5p_barcode", "3p_barcode", 
                                "5p_barcode_and_insert" and "3p_barcode_and_insert") : REQUIRED
 --reapConfig      <STRING>     File path to the reaper geometry configuration directory : OPTIONAL - Default will be supplied config files
@@ -344,7 +344,7 @@ if ($paired){
    print STDERR "Running Sequence imp in paired end mode\n\n";
    die "Require a specified pipeline stage (--stage=reaper/filter)\n" if length($stage)==0;
 
-   ############################## Alter check to allow paired filter stage to be called
+   ############################## Alter check to allow paired filter stage to be called
    
    die "Paired sequence imp can only be initiated with the 'reaper' or 'filter' stages specified\n" if ($stage ne "reaper" && $stage ne "filter");
 }else{
@@ -738,7 +738,7 @@ if ($stage eq "reaper"){
 
 
    ### Removed 120511 - Replaced with new config file system and altered to operate with the new Reaper version   
-#   # Identifying the column containing the barcode in the metadata file   ############# ALTER BARCODE COLLECTION FROM BARCODE FILE - Column name will be constant 1/0 will be assigned based on Barcode YES/NO column.
+#   # Identifying the column containing the barcode in the metadata file   ############# ALTER BARCODE COLLECTION FROM BARCODE FILE - Column name will be constant 1/0 will be assigned based on Barcode YES/NO column.
 #   
 #   if($geometry eq "Illumina_3p_Barcode"){
 #      $barcodePattern = "^3p-bc\$" ;
@@ -1303,10 +1303,10 @@ if ($stage eq "align"){
             # Will require genome - Need a config file for species - Relevant species should be determined at this level and required name passed to keep it central
             # Will require feature type - eg. miRNA
             # Need a better way to control the genome nomenclature
-            # Will need to interpret, specify and check input directory
+            # Will need to interpret, specify and check input directory
             # Will need to create, check and specify output directory
             # Include option to pass it own annotation files (correctly formatted)?
-            # Will also require a version number. Will have to ensure mapping and annotation are version compatible?
+            # Will also require a version number. Will have to ensure mapping and annotation are version compatible?
             # Check annotation file - who's responsibility to ensure genomes match?
             # What directory level will annotation be specified at?
 
@@ -1322,7 +1322,7 @@ if ($stage eq "features"){
       my $mapDir;
 
       $collapse_method = "mature_id" if $collapse_method eq "default";
-      my $R_methodOption = $no_merge ? "" : "--collapse_type=$collapse_method" ;
+      my $R_methodOption = $no_merge ? "" : "--collapse=$collapse_method" ;
 
       my $R_mergingFlag = $no_merge ? "--nomerge=29" : "";
       my $R_propFlag = $proportional ? "--proportional=29" : "";
@@ -1390,7 +1390,7 @@ if ($stage eq "features"){
       print "Available repeat/NCBI sequences:",@repAvail,"\n" if $debug;
       die "No repeat/NCBI sequences were found against which to perform repeat analysis\n" if scalar(@repAvail) == 0;
 
-      #### CALCULATE THE BASE NAME FOR THE EXPERIMENT
+      #### CALCULATE THE BASE NAME FOR THE EXPERIMENT
 
       for my $preprocNow (@preprocdata){
          if ($preprocNow =~ /([\w_]+)\.\w+\.clean\.processed\.fa\.gz$/){
@@ -1417,7 +1417,7 @@ if ($stage eq "features"){
       my $genAnnotDir = "$annotDir/ENSEMBL/$genome"."_$ensversion/BowIndex/";
       my $genPat = "$genAnnotDir*.rev.1.ebwt";
 
-      # Find the genomic base name for mapping
+      # Find the genomic base name for mapping
       
       print STDERR "Identifying genomic reference sequence for generating scaling factor\n\n";
       
@@ -1454,7 +1454,7 @@ if ($stage eq "features"){
             $normOut = "$repAnDir/$sampleBass.normalise.bowtie.temp.ebwt.gz";
          }
 
-         # Bowtie call
+         # Bowtie call
          my $repMismatchOpt = $repMisMatches != 0 ? "-v $repMisMatches" : "";
          my $repChunkOpt = $repChunkmbs != 0 ? "--chunkmbs $repChunkmbs" : "";
 

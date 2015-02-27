@@ -73,11 +73,12 @@ if (!is.null(args$proportional)){
    proportional <- TRUE
 }
 
+
 # 170414 - Allow the collapse of miRNA counts based on sequence rather than ID.   
-if (!is.null(args$collapse_type)){     
-   collapse_type <- args$collapse_type
-}else{
-   stop("Require a specified criteria for collapsing/merging miRNA counts (--collapse_type=<mature_id/sequence>)")
+if (!is.null(args$collapse)){     
+   collapse_type <- args$collapse
+} else {
+   stop("Require a specified criteria for collapsing/merging miRNA counts (--collapse=<mature_id/sequence>)")
 }
 
 if (!is.null(args$treatOverlap)){
@@ -446,8 +447,8 @@ for (input in inputFiles ){
       names(uniqDepthMatrix) <- DupMiRNAsNames
       uniqNumbMatrix <- uniqDepthMatrix # Create a matrix to contain the divided, uniquely mapped, non-redundant read numbers.
       
-      DupliDistribDepth <- uniqDepthMatrix # Create a vector to record the divided multimapping read counts.
-      DupliDistribNumber <- uniqDepthMatrix # Create a vector to record the divided multimapping non-redundant read counts.
+      DupliDistribDepth <- uniqDepthMatrix # Create a vector to record the divided multimapping read counts.
+      DupliDistribNumber <- uniqDepthMatrix # Create a vector to record the divided multimapping non-redundant read counts.
 
       uniqDepthMatrix[names(uniqDepthMatrix)%in%names(uniqueDepth)] <- uniqueDepth[names(uniqDepthMatrix)[names(uniqDepthMatrix)%in%names(uniqueDepth)]]
       uniqNumbMatrix[names(uniqNumbMatrix)%in%names(uniqueNumber)] <- uniqueNumber[names(uniqNumbMatrix)[names(uniqNumbMatrix)%in%names(uniqueNumber)]]

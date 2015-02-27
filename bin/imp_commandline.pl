@@ -30,7 +30,7 @@
 ### creation of metadata files based on simple, tab delineated inputs.
 ### 'config' contains options for imp_commandline and sequence_imp. These are generally handled by
 ### parsing the config file and stringing the options together for each step. However, options required
-### for multiple steps are handled seperately. In addition flags must be handled alone.
+### for multiple steps are handled seperately. In addition flags must be handled alone.
 
 
 use Getopt::Long;
@@ -87,7 +87,7 @@ my $progname = 'imp_commandline.pl';
 #my $seqimp = '/nfs/research2/enright/mat/Small_Stuff/miRNA_Seq/SIROCCO/pipeline/seqimp/bin/sequence_imp.pl';
 my $seqimp = "$ENV{SEQIMP_ROOT}/bin/sequence_imp.pl";             # Ffn of sequence_imp.pl
 my $defDir = "$ENV{SEQIMP_ROOT}/default_configuration_files/";    # Ffn of the default parametre files
-my $sysChck = "$ENV{SEQIMP_ROOT}/bin/system_check.sh";           # Ffn of the system_check.sh script
+my $sysChck = "$ENV{SEQIMP_ROOT}/bin/system_check.pl";           # Ffn of the system_check.sh script
 
 
 ###################
@@ -495,10 +495,10 @@ if
    # Specific sequence_imp steps require this option
    "annotationDir=s" =>   \$annotDirectory,
    )
-)
-   {  print STDERR "option processing failed\n";
-      exit(1);
-   }
+) {  
+	print STDERR "option processing failed\n";
+	exit(1);
+}
 
 if ($help) {
    help();
@@ -534,7 +534,7 @@ $analysisConfig = $userConfig if length($userConfig)!=0;
 $analysisConfig = "$defDir/$defaultConfig" if length($defaultConfig)!=0;
 die "The configuration file doesn't exist or is empty: $analysisConfig\n" if (!-e $analysisConfig || !-s $analysisConfig);
 
-# Limit the number of processors to be used
+# Limit the number of processors to be used
 
 die "\nNumber of processors specified must be between 1 and 64.\n" if ($processors < 1 || $processors > 64);
 
@@ -1085,7 +1085,7 @@ sub parseconf {
    open (CONF, "< $config") || die "Can not open the config file: $config: $!\n";
    
    while (<CONF>) {
-      $line++;
+   	  $line++;
       next if m/^#/;
       chomp;
       
@@ -1468,12 +1468,12 @@ sub make_call {
    
       #### Fold back into the filter stage of the pipeline
       # Remove automatic paired tally step and incorporate into a second filter function.
-      # CHeck that length and trinucleotide specification is consistent (eg. >= etc.).
-      # Pass process_sub_2 as a "" : "--directory2 option" - Coordinate this via the --paired flag.
-      # In sequence_imp die if 3' trimming specified. Tally can not do this.
+      # Check that length and trinucleotide specification is consistent (eg. >= etc.).
+      # Pass process_sub_2 as a "" : "--directory2 option" - Coordinate this via the --paired flag.
+      # In sequence_imp die if 3' trimming specified. Tally can not do this.
       # Introduce --sumstat flag to tally and link between the paired end directories.
       # New tally has change in --record-format2 flag. Change this... and check.
-      # Also pass $pairOpt_sub to sequence_imp to control the tally/filter principles used.
+      # Also pass $pairOpt_sub to sequence_imp to control the tally/filter principles used.
 
    }else{
       die "Unrecognised stage when building sequence_imp command lines\n\n";
