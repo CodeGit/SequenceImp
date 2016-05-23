@@ -1,0 +1,10 @@
+rhome=/home/maq/source/r-build/lib64/R
+rlibdir=${rhome}/lib
+rincludedir=/home/maq/source/r-build/lib64/R/include
+
+Name: libR
+Description: R as a library
+Version: 3.0.2
+Libs: -L${rlibdir} -lR
+Cflags: -I${rincludedir} -I${rincludedir}
+Libs.private:-L/home/maq/source/r-build/lib64/R/lib -lRblas -lgfortran -lm -lquadmath   -lreadline  -llzma -lrt -ldl -lm

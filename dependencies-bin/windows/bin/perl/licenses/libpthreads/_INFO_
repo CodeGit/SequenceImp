@@ -1,0 +1,4 @@
+Package: pthreads-win32-2.10.0
+Homepage: http://sourceware.org/pthreads-win32/
+Sources: ftp://sourceware.org/pub/pthreads-win32/sources
+Comment: sources from CVS 20130514
