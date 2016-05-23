@@ -64,11 +64,37 @@ if (!is.null(args$genMap)){
    stop ("Require a file summarising all reads which map to the genome with repeat analysis criteria: --genMap=<FILE>")
 }
 
+if(!is.null(args$alignRec)){
+   alignRecFile <- args$alignRec
+}else{
+   stop ("Require an alignment record: --alignRec=<FILE>")
+}
+
 if (!is.null(args$debug)){
    debugme <- TRUE
 }
 
 if (debugme){write("\n### DEBUGGING ###\n\n",stderr())}
+
+
+
+### Output file
+outFile <- paste(outDir,"/",basicID,".",repName,".mapping_QC.pdf", sep ="")
+
+
+#######################
+### If no alignment ###
+#######################
+allAlignments <- read.table(file=alignRecFile, sep="\t", header=TRUE, row.names=1, as.is=TRUE)
+if (sum(allAlignments$Alignments)==0){
+   pdf( file = outFile )
+   par(omi=c(0.3,0.3,0.3,0.3))
+   plot(NA,xlim=c(0,1),ylim=c(0,1),xaxt="n",yaxt="n",xlab="",ylab="",bty="n")
+   mtext(paste(basicID,repName), outer=TRUE, cex=1) 
+   text(x=0.5,y=0.5,labels="No alignments found",font=2)
+   dev.off()
+   quit(save="no",status=0)
+}
 
 ########################
 ### Arranging Inputs ###
@@ -116,7 +142,6 @@ sampleNo <- length(names(coverage))
 
 write ("Creating QC PDF",stderr())
 
-outFile <- paste(outDir,"/",basicID,".",repName,".mapping_QC.pdf", sep ="")
 
 pdf( file = outFile ,height=(9.6+(sampleNo*3)), width=7.6)
 
@@ -134,9 +159,18 @@ par(omi=c(0.3,0.3,0.3,0.3))
 
 write ("Recording number of repeat mapping reads",stderr())
 
-repTable <- as.matrix(read.table(repSummary[1], sep="\t", as.is=TRUE, header=TRUE))
+repTable <- read.table(repSummary[1], sep="\t", as.is=TRUE, header=TRUE)
 genomeTable <- read.table(genomeSummary[1], sep="\t",row.names=1, header=TRUE)
-barplot(main = "Canonical repeat mapping reads",repTable, beside=TRUE,col=c('green','red'), ylab='Read Number',xlab='Sample')
+
+# Add back samples with no read alignments
+missing_samples <- rownames(allAlignments[which(allAlignments$Alignments == 0),,drop=FALSE])
+if(length(missing_samples)>0){
+   if (any(missing_samples %in% colnames(repTable))){stop("Repeat information present for sample lacking alignments")}
+   missing_sample_data<- as.data.frame(matrix(data=0,nrow=2,ncol=length(missing_samples),dimnames=list("rows"=rownames(repTable),"cols"=missing_samples)))
+   repTable <- cbind(repTable,missing_sample_data)
+}
+
+barplot(main = "Canonical repeat mapping reads",height=as.matrix(repTable), beside=TRUE,col=c('green','red'), ylab='Read Number',xlab='Sample')
 plot(NA, xlim=c(0,1), ylim=c(0,1),axes=F, xlab="", ylab="")
 legend('topleft', rownames(repTable), fill=c('green', 'red'))
 
@@ -152,12 +186,12 @@ lenTable <- as.data.frame(matrix(data=0, ncol=length(min(as.numeric(colnames(len
 lenTable[,colnames(lenPreTable)] <- lenPreTable
 plotcols <- rainbow(nrow(lenTable))
 names(plotcols) = rownames(lenTable)
-plot(as.numeric(lenTable[1,])~as.numeric(colnames(lenTable)), main="Length distribution of reads mapping\nto the canonical sequence", type = "l",xlab = 'Read length', 
-      ylab='Read number', col = plotcols[rownames(lenTable[1,])], ylim= c(0,max(as.matrix(lenTable))), bty = 'n')
+plot(as.numeric(lenTable[1,])~as.numeric(colnames(lenTable)), main="Length distribution of reads mapping\nto the canonical sequence", type = "o",xlab = 'Read length', 
+      ylab='Read number', col = plotcols[rownames(lenTable[1,,drop=FALSE])], ylim= c(0,max(as.matrix(lenTable))), bty = 'n',pch=20)
 if(nrow(lenTable) > 1){
    write("Length distribution plot being drawn for multiple samples",stderr())
    for (selected in 2:nrow(lenTable)){
-      lines(as.numeric(lenTable[selected,])~as.numeric(colnames(lenTable)),type = "l", col = plotcols[rownames(lenTable[selected,])])
+      lines(as.numeric(lenTable[selected,])~as.numeric(colnames(lenTable)),type = "o", col = plotcols[rownames(lenTable[selected,,drop=FALSE])],pch=20)
    }
 }else{
    write("Single sample: Only single line for the length distribution data",stderr())

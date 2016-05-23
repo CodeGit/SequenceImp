@@ -33,13 +33,14 @@ library(GenomicRanges)
 debugme <- FALSE
 separate <- FALSE # 020413
 proportional <- FALSE # 030413
+collapse_type <- ""
 
 args <- R.utils::commandArgs(asValue=TRUE)
 
 if(!is.null(args$annot)){
    annotationFile <- args$annot
 }else{
-   stop("Require a GRangeList of annotation: --annot=<GRANGESLIST.RData>")  # A list containing the miRNA mature and precursor annotation
+   stop("Require a list of GRanges objects corresponding to miRNA annotation: --annot=<LIST.RData>")  # A list containing the miRNA mature and precursor annotation
 }
 
 if(!is.null(args$inDir)){
@@ -70,6 +71,23 @@ if (!is.null(args$nomerge)){
 
 if (!is.null(args$proportional)){
    proportional <- TRUE
+}
+
+
+# 170414 - Allow the collapse of miRNA counts based on sequence rather than ID.   
+<<<<<<< HEAD
+if (!is.null(args$collapse)){     
+   collapse_type <- args$collapse
+} else {
+   stop("Require a specified criteria for collapsing/merging miRNA counts (--collapse=<mature_id/sequence>)")
+=======
+if (!is.null(args$collapsetype)){     
+   collapse_type <- args$collapsetype
+}else{
+   if(! separate){
+      stop("Require a specified criteria for collapsing/merging miRNA counts (--collapse_type=<mature_id/sequence>)")
+   }
+>>>>>>> branch 'dev' of https://github.com/davis-m/SequenceImp.git
 }
 
 if (!is.null(args$treatOverlap)){
@@ -104,8 +122,17 @@ if(proportional){
 
 if(separate){
    write("All loci considered independently and attributed a unique ID",stderr())
+   if(nchar(collapse_type) > 0){
+      write(paste("WARNING: Ignoring specified collapse type:",collapse_type),stderr())
+   }
 }else{
-   write("miRNAs sharing a miRBase identifier merged to single count",stderr())
+   if(collapse_type == "mature_id"){
+      write("miRNAs sharing a miRBase identifier merged to single count",stderr())
+   }else if(collapse_type == "sequence"){
+      write("miRNAs sharing an identical sequence in miRBase merged to single count",stderr())
+   }else{
+      stop("Require a recognised method with which to merge miRNA counts.")
+   }
 }
 
 ##########################
@@ -116,7 +143,7 @@ write(paste("\nLoading miRBase annotation:",annotationFile),stderr())
 load(annotationFile) # miRBaseGRs
 
 miRs <- miRBaseGRs[["mature"]]         ### Still contains multiple entries for mature miRNAs from several precursors.
-pres <- miRBaseGRs[["precursor"]]
+#pres <- miRBaseGRs[["precursor"]]     ### Removed 150714 Removed for now - room to return later.
 
 #################################################################
 ### Clean up overlapping loci in the miRBase miRNA annotation ### # 040413
@@ -178,7 +205,7 @@ if (length(miROverlaps) > 0){
 
 ### YUP!!
 
-
+#stopifnot(FALSE)
 ############################################
 ### Set up dataframe for evaluating data ###
 ############################################
@@ -197,67 +224,120 @@ if (separate){    ### Added 020413
    
 
    miRCountFrame$Unique_ID <- values(miRs)$uniqueID
+   if(any(duplicated(miRCountFrame$Unique_ID))){stop("Duplicate 'unique' IDs found for miRNAs while constructing dataframe")}
    rownames(miRCountFrame) <- miRCountFrame[,"Unique_ID"]
 
+   miRCountFrame$Sequence <- values(miRs)$sequence
+
    ### Add a row to the table to record the total read depth for the samples
    
-   libraryDepth<- as.data.frame(matrix(data=c("Mapped_library_depth",NA,NA,NA), nrow=1, ncol=4, dimnames=list("rows"=c("Mapped_library_depth"), "cols"=c("Mature","Precursor","Width","Unique_ID"))))
+   libraryDepth<- as.data.frame(matrix(data=c("Mapped_library_depth",NA,NA,NA,NA), nrow=1, ncol=5, dimnames=list("rows"=c("Mapped_library_depth"), "cols"=c("Mature","Precursor","Width","Unique_ID","Sequence"))))
    miRCountFrame <- rbind(miRCountFrame,libraryDepth)
 
+
    #Example:
-   #                                                 Mature    Precursor Width Unique_ID
-   #mmu-mir-206.mmu-miR-206-5p:1:20669098    mmu-miR-206-5p  mmu-mir-206    23 mmu-mir-206.mmu-miR-206-5p:1:2066909
-   #mmu-mir-206.mmu-miR-206-3p:1:20669136    mmu-miR-206-3p  mmu-mir-206    22 mmu-mir-206.mmu-miR-206-3p:1:20669136
-   #mmu-mir-133b.mmu-miR-133b-5p:1:20672878 mmu-miR-133b-5p mmu-mir-133b    22 mmu-mir-133b.mmu-miR-133b-5p:1:20672878
-   #mmu-mir-133b.mmu-miR-133b-3p:1:20672915 mmu-miR-133b-3p mmu-mir-133b    22 mmu-mir-133b.mmu-miR-133b-3p:1:20672915
-   #mmu-mir-30a.mmu-miR-30a-5p:1:23279113    mmu-miR-30a-5p  mmu-mir-30a    22 mmu-mir-30a.mmu-miR-30a-5p:1:23279113
-   #mmu-mir-30a.mmu-miR-30a-3p:1:23279154    mmu-miR-30a-3p  mmu-mir-30a    22 mmu-mir-30a.mmu-miR-30a-3p:1:23279154
-   #Mapped_library_depth               Mapped_library_depth         <NA>  <NA> <NA>   
+   #                                                 Mature    Precursor Width                                  Unique_ID                Sequence
+   #mmu-mir-6341.mmu-miR-6341:1:12426016       mmu-miR-6341 mmu-mir-6341    23       mmu-mir-6341.mmu-miR-6341:1:12426016 CAGUGCAAUGAUAUUGUCACUAU
+   #mmu-mir-206.mmu-miR-206-5p:1:20679017    mmu-miR-206-5p  mmu-mir-206    23      mmu-mir-206.mmu-miR-206-5p:1:20679017 ACAUGCUUCUUUAUAUCCUCAUA
+   #mmu-mir-206.mmu-miR-206-3p:1:20679055    mmu-miR-206-3p  mmu-mir-206    22      mmu-mir-206.mmu-miR-206-3p:1:20679055  UGGAAUGUAAGGAAGUGUGUGG
+   #mmu-mir-133b.mmu-miR-133b-5p:1:20682797 mmu-miR-133b-5p mmu-mir-133b    22    mmu-mir-133b.mmu-miR-133b-5p:1:20682797  GCUGGUCAAACGGAACCAAGUC
+   #mmu-mir-133b.mmu-miR-133b-3p:1:20682834 mmu-miR-133b-3p mmu-mir-133b    22    mmu-mir-133b.mmu-miR-133b-3p:1:20682834  UUUGGUCCCCUUCAACCAGCUA
+   #mmu-mir-30a.mmu-miR-30a-5p:1:23272274    mmu-miR-30a-5p  mmu-mir-30a    22      mmu-mir-30a.mmu-miR-30a-5p:1:23272274  UGUAAACAUCCUCGACUGGAAG
 
 }else{
+   if(collapse_type == "mature_id"){   
+      write("Merging mature miRNA loci that share the miRBase ID into a single entity in results table",stderr())
    
-   write("Merging mature miRNA loci that share the miRBase ID into a single entity in results table",stderr())
-
-   #######################################################################################
-   ### Collect information concerning mature miRNA expression from multiple precursors ###
-   #######################################################################################
-   
-   summaryPre <- list() # Collate precursor information for all mature names  
-   summaryLen <- list() # Also collect miRNA length information per mature name
-   
-   for(i in seq_len(nrow(miRCountFrame))){
-      if(is.null(summaryPre[[miRCountFrame[i,"Mature"]]])){
-         summaryPre[[miRCountFrame[i,"Mature"]]] <- miRCountFrame[i,"Precursor"] 
-         summaryLen[[miRCountFrame[i,"Mature"]]] <- miRCountFrame[i,"Width"]
-      }else{
-         summaryPre[[miRCountFrame[i,"Mature"]]] <- paste(summaryPre[[miRCountFrame[i,"Mature"]]],miRCountFrame[i,"Precursor"], sep = ";") # paste together all hairpin names for identicle miRNA mature names
-         if(summaryLen[[miRCountFrame[i,"Mature"]]] != miRCountFrame[i,"Width"]){
-            stop("miRBase mature miRNAs have two lengths associated with the same name!") # For each mature sequence ensure all widths are identical.
+      #######################################################################################
+      ### Collect information concerning mature miRNA expression from multiple precursors ###
+      #######################################################################################
+      
+      summaryPre <- list() # Collate precursor information for all mature names  
+      summaryLen <- list() # Also collect miRNA length information per mature name
+      
+      for(i in seq_len(nrow(miRCountFrame))){
+         if(is.null(summaryPre[[miRCountFrame[i,"Mature"]]])){
+            summaryPre[[miRCountFrame[i,"Mature"]]] <- miRCountFrame[i,"Precursor"] 
+            summaryLen[[miRCountFrame[i,"Mature"]]] <- miRCountFrame[i,"Width"]
+         }else{
+            summaryPre[[miRCountFrame[i,"Mature"]]] <- c(summaryPre[[miRCountFrame[i,"Mature"]]],miRCountFrame[i,"Precursor"]) # paste together all hairpin names for identicle miRNA mature names
+            if(summaryLen[[miRCountFrame[i,"Mature"]]] != miRCountFrame[i,"Width"]){
+               stop("miRBase mature miRNAs have two lengths associated with the same name!") # For each mature sequence ensure all widths are identical.
+            }
          }
       }
+   
+      summaryPre <- sapply(summaryPre,function(x){paste(unique(x),collapse=";")})      
+
+      ### Remove duplicate mature miRNA names (Merge counts from multiple loci).
+      
+      miRCountFrame <- miRCountFrame[!duplicated(miRCountFrame[,"Mature"]),]
+      rownames(miRCountFrame) <- miRCountFrame[,"Mature"]
+      miRCountFrame[,"Precursor"] <- unlist(summaryPre[rownames(miRCountFrame)],use.names=FALSE)
+      ### Add a row to the table to record the total read depth for the samples
+      
+      libraryDepth<- as.data.frame(matrix(data=c("Mapped_library_depth",NA,NA), nrow=1, ncol=3, dimnames=list("rows"=c("Mapped_library_depth"), "cols"=c("Mature","Precursor","Width"))))
+      miRCountFrame <- rbind(miRCountFrame,libraryDepth)
+   
+      #Example:
+      #                                                       Mature                     Precursor Width
+      #mmu-miR-206-5p                                 mmu-miR-206-5p                   mmu-mir-206    23
+      #mmu-miR-206-3p                                 mmu-miR-206-3p                   mmu-mir-206    22
+      #mmu-miR-133b-5p                               mmu-miR-133b-5p                  mmu-mir-133b    22
+      #mmu-miR-133b-3p                               mmu-miR-133b-3p                  mmu-mir-133b    22
+      #mmu-miR-30a-5p                                 mmu-miR-30a-5p                   mmu-mir-30a    22
+      #mmu-miR-30a-3p                                 mmu-miR-30a-3p                   mmu-mir-30a    22
+      #mmu-miR-669d-5p                               mmu-miR-669d-5p   mmu-mir-669d;mmu-mir-669d-2    22
+      #Mapped_library_depth                     Mapped_library_depth                          <NA>  <NA>
+   }else if(collapse_type == "sequence"){
+      write("Merging mature miRNA loci that share the miRBase mature sequence into a single entity in results table",stderr())
+      
+      miRCountFrame$Sequence <- values(miRs)$sequence
+      
+      summaryPre <- list() # Collate precursor information for all sequences 
+      summaryMat <- list() # Collate mature information for all sequences
+      summaryLen <- list() # Also collect miRNA length information per mature name
+ 
+      for(i in seq_len(nrow(miRCountFrame))){
+         if(is.null(summaryPre[[miRCountFrame[i,"Sequence"]]])){
+            summaryPre[[miRCountFrame[i,"Sequence"]]] <- miRCountFrame[i,"Precursor"]
+            summaryMat[[miRCountFrame[i,"Sequence"]]] <- miRCountFrame[i,"Mature"]
+            summaryLen[[miRCountFrame[i,"Sequence"]]] <- miRCountFrame[i,"Width"]
+         }else{
+            summaryPre[[miRCountFrame[i,"Sequence"]]] <- c(summaryPre[[miRCountFrame[i,"Sequence"]]],miRCountFrame[i,"Precursor"]) # collect together all hairpin names for identicle miRNA mature sequences
+            summaryMat[[miRCountFrame[i,"Sequence"]]] <- c(summaryMat[[miRCountFrame[i,"Sequence"]]],miRCountFrame[i,"Mature"]) # collect together all hairpin names for identicle miRNA mature sequences
+            if(summaryLen[[miRCountFrame[i,"Sequence"]]] != miRCountFrame[i,"Width"]){
+               stop("miRBase mature miRNAs have two lengths associated with the same sequence!") # For each mature sequence ensure all widths are identical.
+            }
+         }
+      }
+
+      summaryPre <- sapply(summaryPre,function(x){paste(unique(x),collapse=";")})
+      summaryMat <- sapply(summaryMat,function(x){paste(unique(x),collapse=";")})
+
+      ### Remove duplicate mature miRNA names (Merge counts from multiple loci).
+ 
+      miRCountFrame <- miRCountFrame[!duplicated(miRCountFrame[,"Sequence"]),]
+      rownames(miRCountFrame) <- miRCountFrame[,"Sequence"]
+      miRCountFrame[,"Mature"] <- summaryMat[rownames(miRCountFrame)]
+      miRCountFrame[,"Precursor"] <- summaryPre[rownames(miRCountFrame)]
+      ### Add a row to the table to record the total read depth for the samples
+ 
+      libraryDepth<- as.data.frame(matrix(data=c("Mapped_library_depth",NA,NA,NA), nrow=1, ncol=4, dimnames=list("rows"=c("Mapped_library_depth"), "cols"=c("Mature","Precursor","Width","Sequence"))))
+      miRCountFrame <- rbind(miRCountFrame,libraryDepth)
+
+      #Example
+      #                                 Mature    Precursor Width Sequence
+      #CAGUGCAAUGAUAUUGUCACUAU    mmu-miR-6341 mmu-mir-6341    23 CAGUGCAAUGAUAUUGUCACUAU
+      #ACAUGCUUCUUUAUAUCCUCAUA  mmu-miR-206-5p  mmu-mir-206    23 ACAUGCUUCUUUAUAUCCUCAUA
+      #UGGAAUGUAAGGAAGUGUGUGG   mmu-miR-206-3p  mmu-mir-206    22 UGGAAUGUAAGGAAGUGUGUGG
+      #GCUGGUCAAACGGAACCAAGUC  mmu-miR-133b-5p mmu-mir-133b    22 GCUGGUCAAACGGAACCAAGUC
+      #UUUGGUCCCCUUCAACCAGCUA  mmu-miR-133b-3p mmu-mir-133b    22 UUUGGUCCCCUUCAACCAGCUA
+      #UGUAAACAUCCUCGACUGGAAG   mmu-miR-30a-5p  mmu-mir-30a    22 UGUAAACAUCCUCGACUGGAAG
+
+   }else{
+      stop("Unrecognised collapse type when producing table")
    }
-
-   ### Remove duplicate mature miRNA names (Merge counts from multiple loci).
-   
-   miRCountFrame <- miRCountFrame[!duplicated(miRCountFrame[,"Mature"]),]
-   rownames(miRCountFrame) <- miRCountFrame[,"Mature"]
-   miRCountFrame[,"Precursor"] <- unlist(summaryPre[rownames(miRCountFrame)],use.names=FALSE)
-   ### Add a row to the table to record the total read depth for the samples
-   
-   libraryDepth<- as.data.frame(matrix(data=c("Mapped_library_depth",NA,NA), nrow=1, ncol=3, dimnames=list("rows"=c("Mapped_library_depth"), "cols"=c("Mature","Precursor","Width"))))
-   miRCountFrame <- rbind(miRCountFrame,libraryDepth)
-
-   #Example:
-   #                                                       Mature                     Precursor Width
-   #mmu-miR-206-5p                                 mmu-miR-206-5p                   mmu-mir-206    23
-   #mmu-miR-206-3p                                 mmu-miR-206-3p                   mmu-mir-206    22
-   #mmu-miR-133b-5p                               mmu-miR-133b-5p                  mmu-mir-133b    22
-   #mmu-miR-133b-3p                               mmu-miR-133b-3p                  mmu-mir-133b    22
-   #mmu-miR-30a-5p                                 mmu-miR-30a-5p                   mmu-mir-30a    22
-   #mmu-miR-30a-3p                                 mmu-miR-30a-3p                   mmu-mir-30a    22
-   #mmu-miR-669d-5p                               mmu-miR-669d-5p   mmu-mir-669d;mmu-mir-669d-2    22
-   #Mapped_library_depth                     Mapped_library_depth                          <NA>  <NA>
-
 }
 
 # YUP!
@@ -376,8 +456,8 @@ for (input in inputFiles ){
       names(uniqDepthMatrix) <- DupMiRNAsNames
       uniqNumbMatrix <- uniqDepthMatrix # Create a matrix to contain the divided, uniquely mapped, non-redundant read numbers.
       
-      DupliDistribDepth <- uniqDepthMatrix # Create a vector to record the divided multimapping read counts.
-      DupliDistribNumber <- uniqDepthMatrix # Create a vector to record the divided multimapping non-redundant read counts.
+      DupliDistribDepth <- uniqDepthMatrix # Create a vector to record the divided multimapping read counts.
+      DupliDistribNumber <- uniqDepthMatrix # Create a vector to record the divided multimapping non-redundant read counts.
 
       uniqDepthMatrix[names(uniqDepthMatrix)%in%names(uniqueDepth)] <- uniqueDepth[names(uniqDepthMatrix)[names(uniqDepthMatrix)%in%names(uniqueDepth)]]
       uniqNumbMatrix[names(uniqNumbMatrix)%in%names(uniqueNumber)] <- uniqueNumber[names(uniqNumbMatrix)[names(uniqNumbMatrix)%in%names(uniqueNumber)]]
@@ -413,12 +493,22 @@ for (input in inputFiles ){
       # YUP!
 
       if(!separate){
-         write("Merging miRNA loci according to the miRBase mature miRNA ID",stderr())
          names(miRs) <- values(miRs)$uniqueID
-         names(uniqueDepth) <- values(miRs[names(uniqueDepth)])$mature
-         names(DupliDistribDepth) <- values(miRs[names(DupliDistribDepth)])$mature
-         names(uniqueNumber) <- values(miRs[names(uniqueNumber)])$mature
-         names(DupliDistribNumber) <- values(miRs[names(DupliDistribNumber)])$mature
+         if(collapse_type == "mature_id"){
+            write("Merging miRNA loci according to the miRBase mature miRNA ID",stderr())
+            names(uniqueDepth) <- values(miRs[names(uniqueDepth)])$mature
+            names(DupliDistribDepth) <- values(miRs[names(DupliDistribDepth)])$mature
+            names(uniqueNumber) <- values(miRs[names(uniqueNumber)])$mature
+            names(DupliDistribNumber) <- values(miRs[names(DupliDistribNumber)])$mature
+         }else if(collapse_type == "sequence"){
+            write("Merging miRNA loci according to the mature sequence",stderr())
+            names(uniqueDepth) <- values(miRs[names(uniqueDepth)])$sequence
+            names(DupliDistribDepth) <- values(miRs[names(DupliDistribDepth)])$sequence
+            names(uniqueNumber) <- values(miRs[names(uniqueNumber)])$sequence
+            names(DupliDistribNumber) <- values(miRs[names(DupliDistribNumber)])$sequence
+         }else{
+            stop("Unrecognised collapse type")
+         }
          uniqueDepth <- tapply(uniqueDepth,names(uniqueDepth),sum)
          DupliDistribDepth <- tapply(DupliDistribDepth,names(DupliDistribDepth),sum)
          uniqueNumber <- tapply(uniqueNumber,names(uniqueNumber),sum)
@@ -451,11 +541,21 @@ for (input in inputFiles ){
          names(countDepth) <- elementMetadata(miRs)[as.numeric(names(countDepth)),"uniqueID"]
          names(countNumber) <- elementMetadata(miRs)[as.numeric(names(countNumber)),"uniqueID"]
       }else{
-         write("Merging miRNA loci according to the miRBase mature miRNA ID",stderr())
-         names(countDepth) <- elementMetadata(miRs)[as.numeric(names(countDepth)),"mature"]
-         countDepth <- tapply(countDepth,names(countDepth),sum)  # Summed the miRNA counts for each unique locus and labelled them with non-unique miRNA mature sequence names -> Finally summed
-         names(countNumber) <- elementMetadata(miRs)[as.numeric(names(countNumber)),"mature"]
-         countNumber <- tapply(countNumber,names(countNumber),sum) # Non-redundant read count for each locus summed depending upon mature miRNA name
+         if(collapse_type == "mature_id"){
+            write("Merging miRNA loci according to the miRBase mature miRNA ID",stderr())
+            names(countDepth) <- elementMetadata(miRs)[as.numeric(names(countDepth)),"mature"]
+            countDepth <- tapply(countDepth,names(countDepth),sum)  # Summed the miRNA counts for each unique locus and labelled them with non-unique miRNA mature sequence names -> Finally summed
+            names(countNumber) <- elementMetadata(miRs)[as.numeric(names(countNumber)),"mature"]
+            countNumber <- tapply(countNumber,names(countNumber),sum) # Non-redundant read count for each locus summed depending upon mature miRNA name
+         }else if(collapse_type == "sequence"){
+            write("Merging miRNA loci according to the mature sequence",stderr())
+            names(countDepth) <- elementMetadata(miRs)[as.numeric(names(countDepth)),"sequence"]
+            countDepth <- tapply(countDepth,names(countDepth),sum)  # Summed the miRNA counts for each unique locus and labelled them with non-unique miRNA mature sequence names -> Finally summed
+            names(countNumber) <- elementMetadata(miRs)[as.numeric(names(countNumber)),"sequence"]
+            countNumber <- tapply(countNumber,names(countNumber),sum) # Non-redundant read count for each locus summed depending upon mature miRNA name
+         }else{
+            stop("Unrecognised collapse type")
+         }
       }
 
       miRCountFrame[names(countNumber),uniqCol] <- round(countNumber,1) # 020413 - Added rounding to Count Number - rounded at the end

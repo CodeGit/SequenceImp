@@ -63,8 +63,8 @@ for (thisFile in inputGRs){
    #stopifnot(FALSE)
    GRSense <- GR[strand(GR)=='+']
    GRAntiSense <- GR[strand(GR)=='-']
-   SenseCoverage <- coverage(GRSense, weight=list(values(GRSense)$count/(maps[barcode,'total']/1000000)))
-   AntiSenseCoverage <- coverage(GRAntiSense, weight=list(values(GRAntiSense)$count/(maps[barcode,'total']/1000000)))
+   SenseCoverage <- coverage(GRSense, weight=round(as.numeric(values(GRSense)$count/(maps[barcode,'total']/1000000)),15))
+   AntiSenseCoverage <- coverage(GRAntiSense, weight=round(as.numeric(values(GRAntiSense)$count/(maps[barcode,'total']/1000000)),15))
 
    coverage[[barcode]] <- list()
    coverage[[barcode]][['Sense']] <- SenseCoverage
@@ -105,9 +105,10 @@ for (thisFile in inputGRs){
          # Overlap the selected unique sense transcripts with the list of antisense transcripts they overlap with. 
          intersectGR=pintersect(tA,tL)
          # Split the depths of the antisense reads in the identicle manner to the overlaps with the sense reads
-         tC=split(as.numeric(values(GRAntiSense[subjectHits(mat)])$count),queryHits(mat))
+         tC=split(as.numeric(values(GRAntiSense[subjectHits(mat)])$count),queryHits(mat)) # Must be a list of the same length as tA
          # Multiply the antisense depths by the corresponding sense depths.
-         tC=mapply('*',tC,as.numeric(values(tA)$count))
+         tC=mapply('*',tC,as.numeric(values(tA)$count),SIMPLIFY=FALSE) # Overlap of a single size is affecting object class of TC and leading to crash?
+                                                        # Single size, 2 overlaps = matrix, single size, 1 overlap = numberic 
 
          #Calculate the length of the overlaps for each read.
          widths=unlist(width(intersectGR))

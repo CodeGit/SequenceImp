@@ -44,7 +44,7 @@ my $rawdata = "";
 my $metadata = "";
 my $base = "reap";                                                                                             # Passed to reaper as a base name for the reaper output files
 my $baseDir = "";
-my $reaperRoute = "reaper";                                    # Default route for Reaper script
+my $reaperRoute = "reaper";                                    #Default route for Reaper script
 my $reaperExtra = "";
 my $uniquifyRoute = "$ENV{SEQIMP_ROOT}/bin/uniquify.pl";       # Default route for uniquify script
 my $qcRoute = "$ENV{SEQIMP_ROOT}/bin/QualityPlot.R";           # Default route for QualityPlot script
@@ -89,8 +89,8 @@ my $genome      = "";
 my $misMatches  = 0 ;
 #my $stratum     = 0 ; # Option removed to control for bowtie biases - Now always set to "ON" - Check below.
 my $hitNo       = 10;
-my $ensversion  = 0 ;
-my $mirversion  = 0 ;
+my $ensversion  = -1 ;
+my $mirversion  = -1 ;
 my $bowtieLog   = "";
 my $annotDir    = "";
 my $versionDir ; 
@@ -114,10 +114,12 @@ my $geoConfig = "$ENV{SEQIMP_ROOT}/config/seqimp_config/geometry_config.txt";   
 my $repMisMatches = 0;
 my $repHitNo = 10;
 my $repChunkmbs = 0;
+my $repversion = -1;
 
 my $no_merge = 0;
 my $proportional = 0;
 my $annot_conflict = "";
+my $collapse_method = "default";  # added 180714 to allow miRNAs to be collapsed on sequence as well as ID.
 
 my $sampleTag = "";
 
@@ -181,11 +183,13 @@ my $OptSuccess = GetOptions(
             "separate_loci"      => \$no_merge,                ### Optional flag specifying whether miRNAs with same mature ID should have their expression values merged.
             "proportional"       => \$proportional,            ### Optional flag specifying whether to ascribe reads according to unique counts only (Only considers miRNA loci when dividing reads)
             "annot_conflict=s"   => \$annot_conflict,          ### Require a value. This specifies how overlapping miRNA loci from miRBase are handled.
+            "collapse_method=s"  => \$collapse_method,         ### Specifies method to be used to merge miRNA counts.
 
             # Stage four (feature = repeat)
+            "repversion=i"        => \$repversion,         ### Required in some instances of stage 4 if repeat feature specified. Specifies repeat annotation version to be selected. 
             "repMismatches=i"     => \$repMisMatches,       ### Required in some instances of stage 4 if repeat feature specified. Number of mismatches to allow between the sequences and canonical repeat
             "repMaxHits=i"        => \$repHitNo,            ### Required in some instances of stage 4 if repeat feature specified. Number of hits to allow between the sequences and the canonical repeat
-            "repChunk=i"          => \$repChunkmbs ,        ### Required in some instances of stage 4 if repeat feature specified. 
+            "repChunk=i"          => \$repChunkmbs,        ### Required in some instances of stage 4 if repeat feature specified. 
 
             # imp_commandline.pl synchronisation options
             "tag=s"           => \$sampleTag,               ### tag to indicate to user what sample is being run.
@@ -234,7 +238,7 @@ ___________________________________________________________________________
 
 ### STAGE ONE OPTIONS: reaper ###
 
-# Required:
+# Required:
 --geometry        <STRING>     The read geometry (currently "no_barcode", "5p_barcode", "3p_barcode", 
                                "5p_barcode_and_insert" and "3p_barcode_and_insert") : REQUIRED
 --reapConfig      <STRING>     File path to the reaper geometry configuration directory : OPTIONAL - Default will be supplied config files
@@ -269,7 +273,7 @@ ___________________________________________________________________________
 ## BOTH STAGES:
 #Required:
 --genome          <STRING>     The species for which the analysis will be performed: REQUIRED
---ensversion      <INTEGER>    Ensembl version for which the analysis will be performed. WARNING: Ensure the ensembl genome build and
+--ensversion      <INTEGER>    Version number for the gene annotation to be used for the analyis. WARNING: Ensure the ensembl genome build and
                                miRBase builds are consistent: REQUIRED for 'align' and some 'features' (eg. --feature=repeat)
 --annotationDir   <STRING>     The base directory in which all pipeline associated annotation is held (eg. Contains ENSEMBL and MIRBASE 
                                directories): REQUIRED
@@ -294,9 +298,11 @@ NOTE: Bowtie always run with --strata flag set
 --separate_loci   <FLAG>       Specifies whether the counts for miRNA loci with the same miRBase mature sequence ID should be merged: OPTIONAL - Default = merge
 --proportional    <FLAG>       Specifies whether to divide reads between all alignments equally or divide multimappers between miRNA loci according to the number of uniquely mapping reads ascribed to each: OPTIONAL - Default = equal division
 --annot_conflict  <STRING>     This determines how the pipeline will handle overlapping miRBase loci - currently supported: "ignore", "merge", "remove" : REQUIRED
+--collapse_method <STRING>     Specified the method that will be used to merge miRNA counts unless 'seperate_loci' flag is set - currently supported: "mature_id" (for miRBase mature ID), "sequence" (for miRBase mature sequence) OPTIONAL - Default = mature_id
 
 ## STAGE FOUR ONLY: features: --feature=repeat
 # Optional:
+--repversion      <INTEGER>   The version number of the NCBI/repeat annotation to be used for the comparison: REQUIRED.
 --repMaxHits      <INTEGER>   The maximum number of alignments allowed between a read and the canonical repeat sequences: OPTIONAL - Default 10   
 --repMismatches   <INTEGER>   The maximum number of mismatches allowed between a read and the canonical repeat sequences or reference genome (used for normalisation): OPTIONAL - Default 0
 --repChunk        <INTEGER>   Value to be passed to the Bowtie chunkmbs option: OPTIONAL
@@ -338,7 +344,7 @@ if ($paired){
    print STDERR "Running Sequence imp in paired end mode\n\n";
    die "Require a specified pipeline stage (--stage=reaper/filter)\n" if length($stage)==0;
 
-   ############################## Alter check to allow paired filter stage to be called
+   ############################## Alter check to allow paired filter stage to be called
    
    die "Paired sequence imp can only be initiated with the 'reaper' or 'filter' stages specified\n" if ($stage ne "reaper" && $stage ne "filter");
 }else{
@@ -425,8 +431,8 @@ if ($stage eq "reaper"){
    #   die "--strata only appropriate if --maxHits >1: See Bowite manual --strata -k respectively\n";
    #}  
 
-   if(!$ensversion){
-      die "Require a specified Ensembl version: --ensversion=<INTEGER>\n";
+   if($ensversion <= 0){
+      die "Require a specified Ensembl version (a positive integer): --ensversion=<INTEGER>\n";
    }
 
    if (length($genome)==0){
@@ -447,20 +453,28 @@ if ($stage eq "reaper"){
      
 
       if($fType eq "miRNA"){
-         if(!$mirversion){
-            die "Require a specified miRBase version: --mirversion=<INTEGER>\n";
+         if($mirversion <= 0){
+            die "Require a specified miRBase version (a positive integer): --mirversion=<INTEGER>\n";
          }
          if ($overlap ==0){
             die "Require a minimum overlap to be specifed for reads and features for the read to be included in feature depth calculations --overlap=<INTEGER>\n";
          }
+
+         die "Can not specify a 'collapse_method' in the analysis config file if 'the seperate_loci' flag is used\n" if ($no_merge && $collapse_method ne "default");
+         $collapse_method = "mature_id" if $collapse_method eq "default";
+         die "--collapse_method=<STRING> can only take the options 'mature_id' and 'sequence'\n" if (($collapse_method ne "mature_id") && ($collapse_method ne "sequence"));
+         
          if (length($annot_conflict)==0){
             die "Require a method to resolve overlapping miRNA loci --annot_conflict=<ignore/remove/merge>\n";
          }
          die "annot_conflict can only take values 'ignore', 'remove' or 'merge'\n" if ($annot_conflict ne "ignore" && $annot_conflict ne "remove" && $annot_conflict ne "merge");
 
       }elsif($fType eq "repeat"){
-         if (!$ensversion){
-            die "Require a specified Ensembl version: --ensversion=<INTEGER>\n";
+         if($repversion <= 0){
+            die "Require a specified repeat version (a positive integer): --repversion=<INTEGER>\n";
+         }
+         if ($ensversion <= 0){
+            die "Require a specified Ensembl version (a positive integer): --ensversion=<INTEGER>\n";
          }
          if ($repHitNo <1){
             die "Require at least a --repMaxHits setting of 1 to allow for unique hits to be identified\n";
@@ -725,7 +739,7 @@ if ($stage eq "reaper"){
 
 
    ### Removed 120511 - Replaced with new config file system and altered to operate with the new Reaper version   
-#   # Identifying the column containing the barcode in the metadata file   ############# ALTER BARCODE COLLECTION FROM BARCODE FILE - Column name will be constant 1/0 will be assigned based on Barcode YES/NO column.
+#   # Identifying the column containing the barcode in the metadata file   ############# ALTER BARCODE COLLECTION FROM BARCODE FILE - Column name will be constant 1/0 will be assigned based on Barcode YES/NO column.
 #   
 #   if($geometry eq "Illumina_3p_Barcode"){
 #      $barcodePattern = "^3p-bc\$" ;
@@ -1077,30 +1091,44 @@ if ($stage eq "filter"){
 
 if ($stage eq "align"){                                    
    
-   ### Identifying desired chromosome length file
 
-   $versionDir = "$annotDir/ENSEMBL/Version_$ensversion/$genome"."_$ensversion/";
+   $versionDir = "$annotDir/ENSEMBL/$genome"."_$ensversion/";
    if(! -d $versionDir){
-      die "Cannot find the directory for the annotation required for the genome and version. Please ensure it has been downloaded appropriately\n";
+      die "Cannot find the directory for the annotation required for the genome and version. Please ensure the annotation has assembled as expected\n";
    }
+
+# 150714: Annotation method change over.
+#   my $APIDir = "$versionDir/API_extracted/";      
+#   die "Cannot find the API_extracted directory for the annotation required for the genome and version requested. Please ensure it has been downloaded appropriately\n" unless -d $APIDir;
+#
+#   my @annotationFiles  = <$APIDir*>;   
+#   print STDERR "Identifying Ensembl API extracted annotation files corresponding to desired annotation\n";
+#   print STDERR "@annotationFiles\n" if $debug;
+#
+#   my @selFiles = grep /$genome-$ensversion.sirocco.chrom_len.tab.gz/, @annotationFiles; 
+#   die "Too many chromosome length files found in $APIDir\n" if scalar @selFiles > 1;
+#   die "Could not find the expected chromosome length file in $APIDir\n" unless scalar @selFiles == 1;
+#   my $chrLenFile = $selFiles[0];
+#   print STDERR "Selected chromosome length file: $chrLenFile\n" if $debug;
    
-   my $APIDir = "$versionDir/API_extracted/";      
-   die "Cannot find the API_extracted directory for the annotation required for the genome and version requested. Please ensure it has been downloaded appropriately\n" unless -d $APIDir;
+   my $genomeDir = "$versionDir/Genome/";      
+   die "Cannot find the Genome directory for the annotation required for the genome and version requested ($genomeDir).\nPlease ensure the annotation has assembled as expected\n" unless -d $genomeDir;
 
-   my @annotationFiles  = <$APIDir*>;   
-   print STDERR "Identifying Ensembl API extracted annotation files corresponding to desired annotation\n";
+   my @annotationFiles  = <$genomeDir*>;   
+   print STDERR "Identifying Ensembl extracted annotation files corresponding to desired annotation\n";
    print STDERR "@annotationFiles\n" if $debug;
-
-   my @selFiles = grep /$genome-$ensversion.sirocco.chrom_len.tab.gz/, @annotationFiles; 
-   die "Too many chromosome length files found in $APIDir\n" if scalar @selFiles > 1;
-   die "Could not find the expected chromosome length file in $APIDir\n" unless scalar @selFiles == 1;
-   my $chrLenFile = $selFiles[0];
+   
+   ### Identifying desired chromosome length file
+   
+   my $chrLenFile = "$genomeDir/$genome"."_$ensversion.chrom_len.tab";                                        
+   die "Cannot find the expected chromosome length file: $chrLenFile, please take a look.\n" unless -s $chrLenFile;
    print STDERR "Selected chromosome length file: $chrLenFile\n" if $debug;
  
    ### Identifying desired chromosome class file
 
-   my $ChrTypeFile = "$APIDir/$genome-$ensversion.sirocco.chrom_class.tab.gz";                                        
+   my $ChrTypeFile = "$genomeDir/$genome"."_$ensversion.chrom_class.tab";                                        
    die "Cannot find the expected chromosome class file: $ChrTypeFile, please take a look.\n" unless -s $ChrTypeFile;
+   print STDERR "Selected chromosome class file: $ChrTypeFile\n" if $debug;
 
    ### Identifying the GRanges and Bowtie directories for the desired genomes - Bowtie index and GRanges RData Annotation files
 
@@ -1117,11 +1145,11 @@ if ($stage eq "align"){
        $bowtieBase = $1;
    }
 
-   my $GRangesClass = "$GRangesDir/$genome.sirocco.classes.RData";
+   my $GRangesClass = "$GRangesDir/$genome"."_$ensversion.annotation.classes.RData";
    die "Cannot locate the file describing the Repeat and Gene annotation sets : $GRangesClass, please check\n" unless -s $GRangesClass;
 
-   my $reducedGRs = "$GRangesDir/$genome.sirocco.reduced.GRanges.Rdata"; 
-   die "Cannot locate the reduced GRanges annotation data for the requested genome and version. Please confirm that the data has been dwnloaded correctly\n" unless -s $reducedGRs;
+   my $reducedGRs = "$GRangesDir/$genome"."_$ensversion.reduced.GRanges.RData"; 
+   die "Cannot locate the reduced GRanges annotation data for the requested genome and version, please check\n" unless -s $reducedGRs;
 
    ### Organising directory structure for alignment process - Checking and creating directories.
    
@@ -1276,10 +1304,10 @@ if ($stage eq "align"){
             # Will require genome - Need a config file for species - Relevant species should be determined at this level and required name passed to keep it central
             # Will require feature type - eg. miRNA
             # Need a better way to control the genome nomenclature
-            # Will need to interpret, specify and check input directory
+            # Will need to interpret, specify and check input directory
             # Will need to create, check and specify output directory
             # Include option to pass it own annotation files (correctly formatted)?
-            # Will also require a version number. Will have to ensure mapping and annotation are version compatible?
+            # Will also require a version number. Will have to ensure mapping and annotation are version compatible?
             # Check annotation file - who's responsibility to ensure genomes match?
             # What directory level will annotation be specified at?
 
@@ -1294,6 +1322,8 @@ if ($stage eq "features"){
       my $analysisDir;
       my $mapDir;
 
+      my $R_methodOption = $no_merge ? "" : "--collapsetype=$collapse_method" ;
+
       my $R_mergingFlag = $no_merge ? "--nomerge=29" : "";
       my $R_propFlag = $proportional ? "--proportional=29" : "";
 
@@ -1305,9 +1335,9 @@ if ($stage eq "features"){
          die "Cannot find the BOWTIE/ directory in $baseDir, please check\n";
       }
 
-      $annotationRData = "$annotDir/MIRBASE/miRBase_$mirversion/$genome"."_$mirversion/miRNA_coordinates.RData";
+      $annotationRData = "$annotDir/MIRBASE/$genome"."_$mirversion/$genome"."_$mirversion.miRNA_coordinates.RData";
       if(! -s $annotationRData){
-         die "Cannot find the annotation file required genome and version ($annotationRData). Please ensure it has been downloaded appropriately\n";
+         die "Cannot find the annotation file required genome and version ($annotationRData), please check.\n";
       }
       $analysisDir = "$baseDir/miRNA_ANALYSIS/";
      
@@ -1315,9 +1345,10 @@ if ($stage eq "features"){
          print STDERR "WARNING: The miRNA_ANALYSIS directory already exists ($analysisDir). Will use current directory. This may cause files to be overwritten.\n"; # The imp will no longer die if rerunning/overwiring - 041111
       }
 
-      die "Cannot make the Analysis directory $analysisDir: $!\n" if (system("mkdir -p -m 0755 $analysisDir"));
+      ### HERE - Add collapse method option if nomerge FALSE
+      die "Cannot make the miRNA analysis directory $analysisDir: $!\n" if (system("mkdir -p -m 0755 $analysisDir"));
    
-      $miRTableCall = "R --slave --vanilla --args --inDir=$mapDir --outDir=$analysisDir --overlap=$overlap --annot=$annotationRData --treatOverlap=$annot_conflict $R_featuresDebug $R_propFlag $R_mergingFlag < $miRTableFfn";
+      $miRTableCall = "R --slave --vanilla --args --inDir=$mapDir --outDir=$analysisDir --overlap=$overlap --annot=$annotationRData --treatOverlap=$annot_conflict $R_featuresDebug $R_propFlag $R_mergingFlag $R_methodOption < $miRTableFfn";
       
       print STDERR "\nPreparing to cross reference Bowtie results with miRBase miRNA annotation\n\n";
       print "Call to miR_table.R: $miRTableCall\n\n" if $debug;
@@ -1333,7 +1364,7 @@ if ($stage eq "features"){
       #### FILES AND DIRECTORIES
 
       my $preprocDir = "$baseDir/PROCESSED/";
-      my $repeatAnnot = "$annotDir/REPEATS/$genome"."_repeats/BowIndex/";
+      my $repeatAnnot = "$annotDir/REPEATS/$genome"."_$repversion/BowIndex/";
       my $repAnDir = "$baseDir/rep_ANALYSIS/";
       my $mappedOut = "$repAnDir/genome_mapped.txt";
       
@@ -1346,7 +1377,7 @@ if ($stage eq "features"){
       my $QCrepDir = "$baseDir/QC/";
 
       die "Could not find a QC/ directory in $baseDir. Required for reporting results.\n" unless -d $QCrepDir;
-      die "Could not identify the repeat BowIndex directory required for the species specified ($repeatAnnot). Please ensure this species is supported.\n" unless -d $repeatAnnot;
+      die "Could not identify the repeat BowIndex directory required for the species specified ($repeatAnnot). Please ensure the repeat data is available for the genome and version specified.\n" unless -d $repeatAnnot;
 
       #### GATHERING INPUT FILES - AUTOMATED: Will count how many consensi are available and will then run on all of them.
 
@@ -1356,10 +1387,10 @@ if ($stage eq "features"){
       my @repAvail = <$repeatAnnot/*rev.1.ebwt>;
 
       print "Preprocessed data files:",@preprocdata,"\n" if $debug;
-      print "Available repeat sequences:",@repAvail,"\n" if $debug;
-      die "No repeats were found against which to perform repeat analysis\n" if scalar(@repAvail) == 0;
+      print "Available repeat/NCBI sequences:",@repAvail,"\n" if $debug;
+      die "No repeat/NCBI sequences were found against which to perform repeat analysis\n" if scalar(@repAvail) == 0;
 
-      #### CALCULATE THE BASE NAME FOR THE EXPERIMENT
+      #### CALCULATE THE BASE NAME FOR THE EXPERIMENT
 
       for my $preprocNow (@preprocdata){
          if ($preprocNow =~ /([\w_]+)\.\w+\.clean\.processed\.fa\.gz$/){
@@ -1383,10 +1414,10 @@ if ($stage eq "features"){
       }
       print STDERR "Identified ".scalar(keys(%repConsensi))." repeats to which the processed files will be compared\n";
    
-      my $genAnnotDir = "$annotDir/ENSEMBL/Version_$ensversion/$genome"."_$ensversion/BowIndex/";
+      my $genAnnotDir = "$annotDir/ENSEMBL/$genome"."_$ensversion/BowIndex/";
       my $genPat = "$genAnnotDir*.rev.1.ebwt";
 
-      # Find the genomic base name for mapping
+      # Find the genomic base name for mapping
       
       print STDERR "Identifying genomic reference sequence for generating scaling factor\n\n";
       
@@ -1423,7 +1454,7 @@ if ($stage eq "features"){
             $normOut = "$repAnDir/$sampleBass.normalise.bowtie.temp.ebwt.gz";
          }
 
-         # Bowtie call
+         # Bowtie call
          my $repMismatchOpt = $repMisMatches != 0 ? "-v $repMisMatches" : "";
          my $repChunkOpt = $repChunkmbs != 0 ? "--chunkmbs $repChunkmbs" : "";
 
@@ -1457,7 +1488,7 @@ if ($stage eq "features"){
 
          ### Pull out repeat name and create a repeat specific file
          my $repeatType = "";
-         $currentRep =~ /([^\/]+)$/ && ($repeatType = $1);
+         $currentRep =~ /([^\/\.]+)$/ && ($repeatType = $1);
          
          print STDERR "\n### Beginning analysis for $repeatType ###\n";
 
@@ -1472,39 +1503,78 @@ if ($stage eq "features"){
          ### Make a call to piRNA_bowtie.pl - bowtie against the canonical sequence
          print STDERR "\nMapping processed reads to canonical repeat sequence with Bowtie\n";
          my $piChunkOpt = $repChunkmbs != 0 ? "--chunkmbs=$repChunkmbs" : "";
-         my $piBowCall = "$piBowtieFfn --in=$preprocDir --out=$repeatOutDir --maxHits=$repHitNo $piChunkOpt --mismatch=$repMisMatches --depthField=$depthFieldFfn --repeat=$currentRep $featuresDebug";
+
+         ###### Bowtie call passed to subsiduary script 
+         ###### Pass file name for recording the alignment number per sample
+        
+         my $recordFile = "$repeatOutDir/$repeatType.repeat_alignments.txt";
+         my $piBowCall = "$piBowtieFfn --in=$preprocDir --out=$repeatOutDir --maxHits=$repHitNo $piChunkOpt --mismatch=$repMisMatches --depthField=$depthFieldFfn --repeat=$currentRep --record=$recordFile $featuresDebug";
          print STDERR "Bowtie against repeat consensi: $piBowCall\n" if $debug;
          die "Bowtie against canonical repeat hasn't worked for $currentRep\n" unless system($piBowCall)==0;
          print STDERR "Mapping complete\n";
 
-         ### boxBowtie call for creating GRanges object
-         print STDERR "\nConverting mapped reads to GRanges objects\n";
-         my $prTot = "$preprocDir/total.saved.trimmit.tab";
-         die "Cannot locate the summary of processed reads: $prTot" unless -e $prTot && -s $prTot;
-         print "Processed Summary File: $prTot\n" if $debug;
-
-         my $chrlFile = "$currentRep.length.txt";
-         die "Cannot locate the chromosome length file: $chrlFile" unless -e $chrlFile && -s $chrlFile;
-         print "Chromosome length file: $chrlFile\n" if $debug;
-
-         my $bbCall = "R --vanilla --slave --args --step=repeat --input=$repeatOutDir --output=$repeatOutDir --maxHits=$repHitNo --chrLen=$chrlFile --procSummary=$prTot --sam=29 $R_featuresDebug < $boxBowtieONEFfn";
-         print STDERR "boxBowtie_Step1.R call: $bbCall\n" if $debug;
-         die "boxBowtie_Step1.R has failed for $currentRep\n" unless system($bbCall)==0;
+         # Skip this section if no alignments are found for any samples.
          
-         print STDERR "GRanges conversion complete\n";   
+         open (ALIGN_REC, "< $recordFile") || die "Could not open the repeat alignment record: $recordFile\n";
+         my $discarded_header = <ALIGN_REC>;
+         my %aligned_counts;
+         while (<ALIGN_REC>){
+            chomp;
+            my @line = split "\t", $_; 
+            $aligned_counts{$line[0]} = $line[1];
+         }
+         close (ALIGN_REC) || die "Could not close the alignment record file: $recordFile\n";
 
-         ### piRNA_coverage call for calculating a coverage object
+         ### Only proceed some alignments are available
+         my $no_alignments = 0;
+         my $total_alignments = 0;
 
-         print STDERR "\nCalculating repeat coverage and read overlaps\n";
-         my $piCovCall = "R --vanilla --slave --args --inputDir=$repeatOutDir --outputDir=$repeatOutDir --mapDepth=$mappedOut --repeatName=$repeatType $R_featuresDebug < $piCovFfn";
-         print "$piCovCall\n" if $debug;
-         print STDERR "Repeat coverage call: $piCovCall\n" if $debug;
-         die "Could not calculate coverage for $currentRep\n" unless system($piCovCall)==0;
-         print STDERR "Completed data collection\n";
+         foreach(keys %aligned_counts){
+            $no_alignments++ if ($aligned_counts{$_}==0);
+            $total_alignments+=$aligned_counts{$_};
+         }
 
+         print STDERR "$no_alignments read set had no alignments to $repeatType\n" if $no_alignments > 0;
+
+         if($total_alignments > 0){
+
+            ### boxBowtie call for creating GRanges object
+            print STDERR "\nConverting mapped reads to GRanges objects\n";
+            my $prTot = "$preprocDir/total.saved.trimmit.tab";
+            die "Cannot locate the summary of processed reads: $prTot" unless -e $prTot && -s $prTot;
+            print "Processed Summary File: $prTot\n" if $debug;
+
+            my $chrlFile = "$currentRep.length.txt";
+            die "Cannot locate the chromosome length file: $chrlFile" unless -e $chrlFile && -s $chrlFile;
+            print "Chromosome length file: $chrlFile\n" if $debug;
+
+            # This script will expect a range of output from $piBowCall - bases processing of samples on .bowtie.unique.output.sort.bam files present.
+            # Therefore any samples with no alignments and hence no bam files from previous step will be lost.
+            my $bbCall = "R --vanilla --slave --args --step=repeat --input=$repeatOutDir --output=$repeatOutDir --maxHits=$repHitNo --chrLen=$chrlFile --procSummary=$prTot --sam=29 $R_featuresDebug < $boxBowtieONEFfn";
+            print STDERR "boxBowtie_Step1.R call: $bbCall\n" if $debug;
+            die "boxBowtie_Step1.R has failed for $currentRep\n" unless system($bbCall)==0;
+            
+            print STDERR "GRanges conversion complete\n";   
+
+            ### piRNA_coverage call for calculating a coverage object
+            # Requires .coverage.RData, .pingpong.tab and .length_distrib.tab files to proceed. Must be present even if one barcode fails - looping based on .bowtie.conv.GR.RData files present.
+            # Samples with no alignment would therefore be lost from output files.
+            print STDERR "\nCalculating repeat coverage and read overlaps\n";
+            my $piCovCall = "R --vanilla --slave --args --inputDir=$repeatOutDir --outputDir=$repeatOutDir --mapDepth=$mappedOut --repeatName=$repeatType $R_featuresDebug < $piCovFfn";
+            print "$piCovCall\n" if $debug;
+            print STDERR "Repeat coverage call: $piCovCall\n" if $debug;
+            die "Could not calculate coverage for $currentRep\n" unless system($piCovCall)==0;
+            print STDERR "Completed data collection\n";
+         
+         }else{
+            print STDERR "Reads from this set of files do not align to $repeatType\n";
+         }
+      
          ### plot piRNA report QC
+         # Ideally a record of the missing samples will be included in the first plot (0 counts) - Pass missing barcode info
+         # If no samples have any reads then plot "No samples possessed alignments" in the file.
          print STDERR "\nPlotting repeat QC information\n";
-         my $repPlotCall = "R --vanilla --slave --args --inputDir=$repeatOutDir --output=$QCrepDir --input=$repeatOutDir --genMap=$mappedOut --repName=$repeatType --basicID=$generalID[0] $R_featuresDebug < $piPlotFfn";
+         my $repPlotCall = "R --vanilla --slave --args --inputDir=$repeatOutDir --output=$QCrepDir --input=$repeatOutDir --genMap=$mappedOut --repName=$repeatType --basicID=$generalID[0] --alignRec=$recordFile $R_featuresDebug < $piPlotFfn";
          print "$repPlotCall\n" if $debug;
          print STDERR "Repeat coverage plots: $repPlotCall\n" if $debug;
          die "Could not plot repeat QC plots\n" unless system($repPlotCall)==0;
