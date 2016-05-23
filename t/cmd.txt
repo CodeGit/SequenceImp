@@ -1,0 +1,1 @@
+imp_commandline.pl --debug --step=reaper --description=/Users/maq/source/workspace/seqimp/test-data/metadata/description.txt --user-configuration=/Users/maq/source/workspace/seqimp/test-data/metadata/config.txt --no-unique --dataDir=/Users/maq/source/workspace/seqimp/test-data/seq-staging --analysisDir=/Users/maq/source/workspace/seqimp/test-data/run/analysis
