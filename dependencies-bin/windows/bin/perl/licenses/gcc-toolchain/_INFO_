@@ -1,0 +1,14 @@
+Package: gcc-4.7.3
+Homepage: http://gcc.gnu.org/
+Sources: ftp://gcc.gnu.org/pub/gcc/releases/
+
+Package: binutils-2.23.2
+Homepage: http://www.gnu.org/software/binutils/
+Sources: http://ftp.gnu.org/gnu/binutils/
+
+Package: mingw-w64-stable-2.0.8-r5746
+Homepage: http://mingw-w64.sourceforge.net/
+Sources: http://sourceforge.net/projects/mingw-w64/files/Toolchain%20sources/
+SVN: https://mingw-w64.svn.sourceforge.net/svnroot/mingw-w64/
+Comment: wglext.h glxext.h glext.h (from the Khronos Group)
+Comment: opencl (from the Khronos Group)

@@ -1,0 +1,2 @@
+Name	File	Geometry	Barcodes	5p_ad	3p_ad	5p_seq_insert	3p_seq_insert
+Genome_Research	SRR095855.fastq.gz	5p_barcode_and_insert	CATG,CTAG,GATC,ACTG,GCTA,GTAC,AGTC,GTCA,CTGA,TCAG	GTTCAGAGTTCTACAGTCCGACGATC	ATCTCGTATGCCGTCTTCTGCTTG	CG	-

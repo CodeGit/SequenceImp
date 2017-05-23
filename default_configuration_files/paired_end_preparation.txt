@@ -29,6 +29,8 @@ annot_conflict	NA
 overlap	NA
 proportional	NA
 separate_loci	NA
+collapse_method	NA
+repversion	NA
 repMaxHits	NA
 repMismatches	NA
 repChunk	NA
